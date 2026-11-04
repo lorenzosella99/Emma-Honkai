@@ -288,6 +288,7 @@ function initGate() {
       DB.set('access_verified', true);
       showScreen('screen-auth');
       renderAuthScreen();
+      initAuth();
     } else {
       toast('Código inválido. Entre em contato com um admin no Discord.', 'error');
       el('gate-code').classList.add('shake');
