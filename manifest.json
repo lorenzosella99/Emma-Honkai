@@ -1,0 +1,17 @@
+{
+  "name": "Emma Honkai Chat",
+  "short_name": "Emma",
+  "description": "Converse com seus personagens favoritos de Honkai",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0b10",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/identicon/svg?seed=emma-honkai",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
