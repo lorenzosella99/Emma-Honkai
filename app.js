@@ -2,17 +2,110 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-// ─── DATA LAYER (simulando emma_honkai_dados) ───────────────────────────────
+// ─── GITHUB DB — integração com emma_honkai_dados ───────────────────────────
+const GITHUB_REPO  = 'lorenzosella99/emma_honkai_dados';
+const GITHUB_BRANCH = 'main';
+const RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/dados`;
+const API_BASE = `https://api.github.com/repos/${GITHUB_REPO}/contents/dados`;
+
+// Mapeamento: chave local → arquivo no repo
+const GH_FILES = {
+  users:      'users.json',
+  characters: 'characters.json',
+  missions:   'missions.json',
+  config:     'config.json'
+};
+
+// SHAs cacheados para evitar re-fetch (necessário para PUT no GitHub API)
+const _ghSHAs = {};
+
+function ghToken() {
+  try { return localStorage.getItem('emma_gh_token') || ''; } catch { return ''; }
+}
+
+function ghSetToken(tok) {
+  try { localStorage.setItem('emma_gh_token', tok); } catch {}
+}
+
+// Busca arquivo do GitHub (raw, sem autenticação — funciona em repos públicos)
+async function ghFetch(filename) {
+  try {
+    const url = `${RAW_BASE}/${filename}?t=${Date.now()}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
+// Faz push de um arquivo para o GitHub (requer token)
+async function ghPush(filename, content) {
+  const token = ghToken();
+  if (!token) return false;
+  try {
+    // Busca SHA atual do arquivo (necessário para update)
+    const infoRes = await fetch(`${API_BASE}/${filename}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    let sha = _ghSHAs[filename];
+    if (infoRes.ok) {
+      const info = await infoRes.json();
+      sha = info.sha;
+      _ghSHAs[filename] = sha;
+    }
+    const body = {
+      message: `update ${filename} [app]`,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
+      branch: GITHUB_BRANCH
+    };
+    if (sha) body.sha = sha;
+    const putRes = await fetch(`${API_BASE}/${filename}`, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (putRes.ok) {
+      const r = await putRes.json();
+      if (r.content) _ghSHAs[filename] = r.content.sha;
+      return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
+// Sincroniza do GitHub para o localStorage (pull)
+async function ghPull() {
+  let pulled = 0;
+  for (const [key, file] of Object.entries(GH_FILES)) {
+    const data = await ghFetch(file);
+    if (data !== null) {
+      try { localStorage.setItem('emma_' + key, JSON.stringify(data)); } catch {}
+      pulled++;
+    }
+  }
+  return pulled;
+}
+
+// Push de uma chave local para o GitHub (fire-and-forget, não bloqueia UI)
+function ghPushKey(key) {
+  const file = GH_FILES[key];
+  if (!file || !ghToken()) return;
+  try {
+    const val = localStorage.getItem('emma_' + key);
+    if (val) ghPush(file, JSON.parse(val)).catch(() => {});
+  } catch {}
+}
+
+// ─── DATA LAYER ──────────────────────────────────────────────────────────────
 const DB = {
   get(key, def = null) {
     try { const v = localStorage.getItem('emma_' + key); return v ? JSON.parse(v) : def; } catch { return def; }
   },
   set(key, val) {
-    try { localStorage.setItem('emma_' + key, JSON.stringify(val)); } catch {}
-  },
-  _sync() {
-    // Em produção, sincronizaria com emma_honkai_dados via GitHub API
-    // Por enquanto, tudo fica no localStorage (funciona offline)
+    try {
+      localStorage.setItem('emma_' + key, JSON.stringify(val));
+      // Faz push assíncrono para o GitHub se for uma chave sincronizada
+      ghPushKey(key);
+    } catch {}
   }
 };
 
@@ -1570,8 +1663,71 @@ function renderAdminPanel() {
       </div>
     </div>
 
+    <!-- GITHUB SYNC -->
+    <div class="admin-section">
+      <div class="admin-section-header">🔗 Sincronização GitHub</div>
+      <div class="admin-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <div class="admin-row-sub" style="line-height:1.5">
+          Os dados são lidos do repositório <code style="background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px">emma_honkai_dados</code> ao iniciar o app.
+          Para que o app também <strong>salve</strong> dados no repositório, configure um token do GitHub com permissão de escrita (<code style="background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px">Contents: write</code>).
+        </div>
+        <div style="display:flex;gap:8px;width:100%;align-items:center">
+          <input type="password" class="input" id="gh-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+            value="${ghToken() ? '•'.repeat(20) : ''}" style="flex:1" autocomplete="off">
+          <button class="btn btn-primary btn-sm" onclick="saveGhToken()">Salvar Token</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearGhToken()">Remover</button>
+        </div>
+        <div id="gh-status" style="font-size:.75rem;color:var(--text-muted)">
+          ${ghToken() ? '✅ Token configurado — dados serão enviados ao GitHub ao salvar' : '⚠️ Sem token — app só lê do GitHub, não escreve'}
+        </div>
+      </div>
+      <div class="admin-row" style="justify-content:flex-end;gap:8px;margin-top:4px">
+        <button class="btn btn-secondary btn-sm" onclick="manualGhPull()">⬇️ Puxar dados do GitHub agora</button>
+        <button class="btn btn-secondary btn-sm" onclick="manualGhPush()">⬆️ Enviar dados ao GitHub agora</button>
+      </div>
+    </div>
+
     <div style="height:32px"></div>
   `;
+}
+
+function saveGhToken() {
+  const val = el('gh-token-input').value.trim();
+  if (!val || val.startsWith('•')) return toast('Cole um token válido.', 'error');
+  ghSetToken(val);
+  toast('Token salvo!', 'success');
+  renderAdminPanel();
+}
+
+function clearGhToken() {
+  localStorage.removeItem('emma_gh_token');
+  toast('Token removido.', 'info');
+  renderAdminPanel();
+}
+
+async function manualGhPull() {
+  toast('Puxando dados do GitHub...', 'info');
+  const n = await ghPull();
+  if (n > 0) {
+    toast(`${n} arquivo(s) sincronizados!`, 'success');
+    renderAdminPanel();
+  } else {
+    toast('Nenhum dado recebido do GitHub.', 'error');
+  }
+}
+
+async function manualGhPush() {
+  if (!ghToken()) return toast('Configure um token GitHub primeiro.', 'error');
+  toast('Enviando dados ao GitHub...', 'info');
+  let ok = 0;
+  for (const [key, file] of Object.entries(GH_FILES)) {
+    const val = DB.get(key);
+    if (val !== null) {
+      const res = await ghPush(file, val);
+      if (res) ok++;
+    }
+  }
+  toast(ok > 0 ? `${ok} arquivo(s) enviados!` : 'Falha ao enviar. Verifique o token.', ok > 0 ? 'success' : 'error');
 }
 
 function saveConfig() {
@@ -1962,6 +2118,17 @@ function autoResize(ta) {
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
+  // Tenta sincronizar dados do GitHub antes de inicializar
+  // (silent — continua mesmo se GitHub estiver offline)
+  try {
+    const loadingMsg = el('loading-status');
+    if (loadingMsg) loadingMsg.textContent = 'Sincronizando dados...';
+    await Promise.race([
+      ghPull(),
+      new Promise(r => setTimeout(r, 4000)) // timeout 4s
+    ]);
+  } catch {}
+
   initData();
 
   const userId = DB.get('current_user');
