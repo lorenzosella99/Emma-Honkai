@@ -408,10 +408,27 @@ function initGate() {
 let authMode = 'login';
 
 function renderAuthScreen() {
-  el('auth-title').textContent = authMode === 'login' ? 'Bem-vindo de volta' : 'Criar conta';
+  const isRecovery = authMode === 'recovery';
+  el('auth-title').textContent = authMode === 'login' ? 'Bem-vindo de volta' : authMode === 'register' ? 'Criar conta' : '🔑 Recuperar senha';
   el('auth-tab-login').classList.toggle('active', authMode === 'login');
   el('auth-tab-register').classList.toggle('active', authMode === 'register');
-  el('auth-submit').textContent = authMode === 'login' ? 'Entrar' : 'Criar conta';
+  el('auth-submit').textContent = authMode === 'login' ? 'Entrar' : authMode === 'register' ? 'Criar conta' : 'Redefinir senha';
+
+  // Show/hide recovery link
+  let recoveryLink = el('auth-recovery-link');
+  if (!recoveryLink) {
+    recoveryLink = document.createElement('div');
+    recoveryLink.id = 'auth-recovery-link';
+    recoveryLink.style.cssText = 'text-align:center;margin-top:-8px';
+    el('auth-submit').insertAdjacentElement('afterend', recoveryLink);
+  }
+  recoveryLink.innerHTML = authMode === 'login'
+    ? `<button class="btn-link" onclick="authMode='recovery';renderAuthScreen()">Esqueci minha senha</button>`
+    : `<button class="btn-link" onclick="authMode='login';renderAuthScreen()">← Voltar para login</button>`;
+
+  // Show/hide username & password fields depending on mode
+  el('auth-username').parentElement.style.display = '';
+  el('auth-password').parentElement.style.display = authMode === 'recovery' ? 'none' : '';
 
   if (authMode === 'register') {
     el('auth-fields-register').classList.remove('hidden');
@@ -441,6 +458,28 @@ function renderAuthScreen() {
         </div>
       </div>
     `;
+  } else if (authMode === 'recovery') {
+    el('auth-fields-register').classList.remove('hidden');
+    el('auth-fields-register').innerHTML = `
+      <div class="recovery-info">
+        <div style="font-size:.85rem;color:var(--text-2);line-height:1.6;margin-bottom:12px">
+          Como o app é local (sem servidor), a recuperação funciona com o <strong>código admin</strong>.
+          Um admin pode redefinir sua senha pelo painel, ou você pode redefinir aqui usando o código admin.
+        </div>
+        <div class="field">
+          <label>Novo usuário (confirme)</label>
+          <input type="text" class="input" id="recovery-username" placeholder="Digite seu nome de usuário">
+        </div>
+        <div class="field">
+          <label>Nova senha</label>
+          <input type="password" class="input" id="recovery-newpass" placeholder="Nova senha (mín. 4 caracteres)">
+        </div>
+        <div class="field">
+          <label>Código admin para autorizar</label>
+          <input type="text" class="input" id="recovery-admincode" placeholder="Código do administrador" style="letter-spacing:2px">
+        </div>
+      </div>
+    `;
   } else {
     el('auth-fields-register').classList.add('hidden');
     el('auth-fields-register').innerHTML = '';
@@ -462,6 +501,8 @@ function initAuth() {
   el('auth-tab-register').onclick = () => { authMode = 'register'; renderAuthScreen(); };
 
   el('auth-submit').onclick = () => {
+    if (authMode === 'recovery') return handleRecovery();
+
     const username = el('auth-username').value.trim();
     const password = el('auth-password').value;
 
@@ -517,6 +558,70 @@ function initAuth() {
   el('auth-password').addEventListener('keypress', e => {
     if (e.key === 'Enter') el('auth-submit').click();
   });
+}
+
+// ─── PASSWORD RECOVERY ───────────────────────────────────────────────────────
+function handleRecovery() {
+  const username = (el('recovery-username')?.value || '').trim();
+  const newPass  = (el('recovery-newpass')?.value || '');
+  const adminCode = (el('recovery-admincode')?.value || '').trim();
+
+  if (!username) return toast('Digite seu nome de usuário.', 'error');
+  if (!newPass || newPass.length < 4) return toast('Nova senha muito curta.', 'error');
+  if (!adminCode) return toast('Código admin obrigatório.', 'error');
+
+  if (adminCode !== cfg().adminCode) {
+    toast('Código admin inválido. Peça ao administrador.', 'error');
+    el('recovery-admincode').classList.add('shake');
+    setTimeout(() => el('recovery-admincode')?.classList.remove('shake'), 500);
+    return;
+  }
+
+  const users = DB.get('users', []);
+  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!user) return toast('Usuário não encontrado.', 'error');
+
+  user.password = newPass;
+  DB.set('users', users);
+  toast('Senha redefinida com sucesso! Faça login.', 'success', 3500);
+  authMode = 'login';
+  renderAuthScreen();
+  // Pre-fill username
+  setTimeout(() => { if (el('auth-username')) el('auth-username').value = username; }, 50);
+}
+
+// Admin reset (from admin panel)
+function adminResetPassword(userId) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">🔑 Redefinir Senha</div>
+      <div class="field">
+        <label>Nova senha</label>
+        <input type="text" class="input" id="admin-new-pass" placeholder="Nova senha (mín. 4 caracteres)">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+        <button class="btn btn-primary flex-1" onclick="confirmAdminReset('${userId}', this)">Redefinir</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function confirmAdminReset(userId, btn) {
+  const newPass = el('admin-new-pass').value.trim();
+  if (!newPass || newPass.length < 4) return toast('Senha muito curta.', 'error');
+  const users = DB.get('users', []);
+  const user = users.find(u => u.id === userId);
+  if (!user) return;
+  user.password = newPass;
+  DB.set('users', users);
+  btn.closest('.modal-overlay').remove();
+  toast(`Senha de "${user.username}" redefinida!`, 'success');
+  renderAdminPanel();
 }
 
 function showBanModal(reason, days) {
@@ -1435,6 +1540,7 @@ function renderAdminPanel() {
             <div class="admin-row-sub">🪙 ${u.coins} · ${u.totalMessages||0} msgs · desde ${formatDate(u.joinDate)}</div>
           </div>
           <div class="admin-actions">
+            <button class="btn btn-xs btn-secondary" onclick="adminResetPassword('${u.id}')" title="Redefinir senha">🔑</button>
             ${u.bannedUntil && Date.now() < u.bannedUntil
               ? `<button class="btn btn-xs btn-secondary" onclick="unbanUser('${u.id}')">Desbanir</button>`
               : u.id !== state.currentUser.id

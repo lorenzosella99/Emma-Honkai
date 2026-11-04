@@ -1107,6 +1107,27 @@ img { display: block; }
   color: var(--text-2);
 }
 
+/* ========= RECOVERY / AUTH EXTRAS ========= */
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color .15s, color .15s;
+}
+.btn-link:hover { text-decoration-color: var(--accent-2); }
+.recovery-info {
+  background: rgba(139,92,246,.07);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
 /* ========= LOADING SCREEN ========= */
 #screen-loading {
   align-items: center;
