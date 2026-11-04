@@ -414,8 +414,6 @@ function checkDailyMission() {
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
 function renderMainApp() {
-  updateCoinsDisplay();
-  el('header-username').textContent = state.currentUser.username;
   if (state.currentUser.isAdmin) {
     el('admin-nav-btn').classList.remove('hidden');
   }
@@ -426,7 +424,10 @@ function updateCoinsDisplay() {
   const user = users.find(u => u.id === state.currentUser.id);
   if (user) {
     state.currentUser = user;
-    el('header-coins-amount').textContent = user.coins;
+    // Update any visible coin counter
+    document.querySelectorAll('.coins-display').forEach(el2 => {
+      el2.textContent = user.coins;
+    });
   }
 }
 
@@ -469,45 +470,44 @@ function updateNavBadges() {
 
 // ─── CHARS TAB ───────────────────────────────────────────────────────────────
 function renderCharsTab(container) {
-  const chars = DB.get('characters', []);
+  const skeletonCard = `
+    <div class="skeleton-card" style="flex-direction:column;padding:0;gap:0;border-radius:12px;overflow:hidden">
+      <div class="skeleton" style="aspect-ratio:3/4;width:100%"></div>
+      <div style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+        <div class="skeleton skel-line" style="width:70%"></div>
+        <div class="skeleton skel-line-sm" style="width:50%"></div>
+      </div>
+    </div>`;
 
   container.innerHTML = `
-    <div class="app-header" id="chars-header">
+    <div class="app-header">
       <div class="header-title">✨ Personagens</div>
       <div class="header-coins">
         <span>🪙</span>
-        <span id="header-coins-amount">${state.currentUser.coins}</span>
+        <span class="coins-display">${state.currentUser.coins}</span>
       </div>
     </div>
-    <div class="main-content">
-      <div class="section-title">Disponíveis</div>
-      <div class="chars-grid" id="chars-grid"></div>
-      <div class="section-title" style="margin-top:8px">Todos</div>
-      <div class="chars-grid" id="chars-grid-all"></div>
-      <div style="height:16px"></div>
+    <div style="padding-bottom:calc(var(--nav-h) + 12px)">
+      <div class="section-title">Online agora</div>
+      <div class="chars-grid" id="chars-grid">
+        ${Array(2).fill(skeletonCard).join('')}
+      </div>
+      <div class="section-title" style="margin-top:8px">Todos os personagens</div>
+      <div class="chars-grid" id="chars-grid-all">
+        ${Array(4).fill(skeletonCard).join('')}
+      </div>
+      <div style="height:8px"></div>
     </div>
   `;
 
-  // Skeleton then render
+  // Replace skeletons with real content after short delay
   setTimeout(() => {
+    const chars = DB.get('characters', []);
     const online = chars.filter(c => c.isOnline && !c.isBanned);
     const all = chars.filter(c => !c.isOnline || c.isBanned);
     renderCharGrid(el('chars-grid'), online);
     renderCharGrid(el('chars-grid-all'), all);
-    updateCoinsDisplay();
-  }, 400);
-
-  // Skeleton placeholder
-  el('chars-grid').innerHTML = el('chars-grid-all').innerHTML =
-    Array(4).fill(0).map(() => `
-      <div class="skeleton-card" style="flex-direction:column;padding:0;gap:0">
-        <div class="skeleton" style="aspect-ratio:3/4;width:100%;border-radius:12px 12px 0 0"></div>
-        <div style="padding:10px 12px;display:flex;flex-direction:column;gap:5px">
-          <div class="skeleton skel-line" style="width:70%"></div>
-          <div class="skeleton skel-line-sm" style="width:50%"></div>
-        </div>
-      </div>
-    `).join('');
+  }, 500);
 }
 
 function renderCharGrid(container, chars) {
@@ -890,7 +890,7 @@ function renderProfileTab(container) {
 
   container.innerHTML = `
     <div class="profile-banner"></div>
-    <div style="padding-bottom:16px">
+    <div style="padding-bottom:calc(var(--nav-h) + 16px)">
       <div class="profile-avatar-wrap">
         <div class="profile-avatar">
           <img src="https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.username)}" alt="${user.username}">
@@ -980,9 +980,9 @@ function renderMissionsTab(container) {
   container.innerHTML = `
     <div class="app-header">
       <div class="header-title">🎯 Missões</div>
-      <div class="header-coins"><span>🪙</span><span id="header-coins-amount">${user.coins}</span></div>
+      <div class="header-coins"><span>🪙</span><span class="coins-display">${user.coins}</span></div>
     </div>
-    <div class="main-content">
+    <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       ${user.uniqueCharsContacted?.length === 0 ? `
         <div style="margin:12px 16px;background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(192,132,252,.08));border:1px solid var(--border-bright);border-radius:var(--radius);padding:14px">
           <div style="font-size:.85rem;font-weight:700;margin-bottom:4px">👋 Novo por aqui?</div>

@@ -345,7 +345,6 @@ img { display: block; }
 /* ========= MAIN CONTENT ========= */
 .main-content {
   flex: 1;
-  overflow-y: auto;
   overscroll-behavior: contain;
   padding-bottom: calc(var(--nav-h) + 8px);
 }
