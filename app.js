@@ -41,27 +41,8 @@ const DEFAULT_CHARACTERS = [
     isBanned: false,
     banUntil: null,
     banReason: '',
-    botPersonality: 'Sou Emma, de Honkai. Falo de forma misteriosa e poética, com toques de humor seco.',
-    online_responses: [
-      { type: 'thought', text: 'Interessante... esse humano parece curioso.' },
-      { type: 'action', text: 'olha com seus olhos violeta, pensativa' },
-      { type: 'speech', text: 'Você me surpreende. Poucos se atrevem a me falar assim.' }
-    ],
-    offline_responses: [
-      [
-        { type: 'thought', text: 'Mais um viajante perdido neste mar de estrelas...' },
-        { type: 'action', text: 'suspira levemente, olhando para o horizonte' },
-        { type: 'speech', text: 'Ei. Não esperava você por aqui hoje.' }
-      ],
-      [
-        { type: 'thought', text: 'O que será que quer saber?' },
-        { type: 'speech', text: 'Você pergunta coisas interessantes. Deixa eu pensar...' }
-      ],
-      [
-        { type: 'action', text: 'cruza os braços, com um sorriso misterioso' },
-        { type: 'speech', text: 'Sempre aparece na hora certa, não é?' }
-      ]
-    ]
+    gender: 'female',
+    botPersonality: 'Sou Emma, de Honkai. Falo de forma misteriosa e poética, com toques de humor seco. Respondo com elegância e profundidade às mensagens recebidas.'
   },
   {
     id: 'stelle',
@@ -73,27 +54,8 @@ const DEFAULT_CHARACTERS = [
     isBanned: false,
     banUntil: null,
     banReason: '',
-    botPersonality: 'Sou Stelle, a Trailblazer. Sou direta, animada e um pouco impulsiva.',
-    online_responses: [
-      { type: 'thought', text: 'Boa pergunta! Preciso pensar nisso...' },
-      { type: 'action', text: 'bate uma mão no punho, animada' },
-      { type: 'speech', text: 'Ei! Vamos resolver isso juntos!' }
-    ],
-    offline_responses: [
-      [
-        { type: 'thought', text: 'Mais uma aventura começa!' },
-        { type: 'action', text: 'sorri amplamente' },
-        { type: 'speech', text: 'Que bom te ver! Tô pronta pra qualquer coisa.' }
-      ],
-      [
-        { type: 'speech', text: 'Oioi! Acabei de chegar. O que rolou?' }
-      ],
-      [
-        { type: 'action', text: 'sacode a mochila nas costas' },
-        { type: 'thought', text: 'Nunca sei o que esperar, mas tô animada.' },
-        { type: 'speech', text: 'Pronta pra mais uma! Conta pra mim.' }
-      ]
-    ]
+    gender: 'female',
+    botPersonality: 'Sou Stelle, a Trailblazer. Sou direta, animada e um pouco impulsiva. Adoro desafios e respondo com entusiasmo e energia.'
   },
   {
     id: 'kafka',
@@ -105,27 +67,8 @@ const DEFAULT_CHARACTERS = [
     isBanned: false,
     banUntil: null,
     banReason: '',
-    botPersonality: 'Sou Kafka. Falo de forma enigmática, às vezes provocativa, sempre elegante.',
-    online_responses: [
-      { type: 'thought', text: 'Ele/ela me intriga.' },
-      { type: 'action', text: 'inclina a cabeça, sorrindo levemente' },
-      { type: 'speech', text: 'Que surpresa agradável. Continua.' }
-    ],
-    offline_responses: [
-      [
-        { type: 'thought', text: 'Sempre aparecem quando menos espero.' },
-        { type: 'action', text: 'ajusta o cabelo com um gesto elegante' },
-        { type: 'speech', text: 'Você me encontrou. Boa sorte... ou não.' }
-      ],
-      [
-        { type: 'speech', text: 'Quanto tempo. Achei que você tinha desistido.' }
-      ],
-      [
-        { type: 'action', text: 'olha de lado, com um sorriso enigmático' },
-        { type: 'thought', text: 'Interessante timing.' },
-        { type: 'speech', text: 'Sempre aparece na hora certa. Ou errada. Depende do ponto de vista.' }
-      ]
-    ]
+    gender: 'female',
+    botPersonality: 'Sou Kafka. Falo de forma enigmática, às vezes provocativa, sempre elegante. Respondo com mistério e charme calculado.'
   },
   {
     id: 'blade',
@@ -137,27 +80,188 @@ const DEFAULT_CHARACTERS = [
     isBanned: false,
     banUntil: null,
     banReason: '',
-    botPersonality: 'Sou Blade. Falo pouco, direto ao ponto. Tom sombrio e cansado da vida.',
-    online_responses: [
-      { type: 'thought', text: '...' },
-      { type: 'speech', text: 'Fala.' }
-    ],
-    offline_responses: [
-      [
-        { type: 'action', text: 'olha sem expressão' },
-        { type: 'speech', text: 'Você ainda está vivo. Bem.' }
-      ],
-      [
-        { type: 'thought', text: 'De novo.' },
-        { type: 'speech', text: '...' }
-      ],
-      [
-        { type: 'action', text: 'suspira, cansado' },
-        { type: 'speech', text: 'O que quer?' }
-      ]
-    ]
+    gender: 'male',
+    botPersonality: 'Sou Blade. Falo pouco, direto ao ponto. Tom sombrio e cansado da vida. Mínimo de palavras, máximo de impacto.'
   }
 ];
+
+// ─── DYNAMIC BOT RESPONSE ENGINE ─────────────────────────────────────────────
+// Gera respostas contextuais baseadas na personalidade do personagem e na mensagem do usuário
+function generateBotResponse(char, userMessage, history) {
+  const msg = userMessage.toLowerCase();
+  const personality = (char.botPersonality || '').toLowerCase();
+  const name = char.name;
+
+  // Detecta keywords da mensagem do usuário
+  const isQuestion = msg.includes('?') || msg.startsWith('o que') || msg.startsWith('como') || msg.startsWith('por que') || msg.startsWith('quando') || msg.startsWith('onde') || msg.startsWith('quem') || msg.startsWith('qual');
+  const isGreeting = /\b(oi|olá|ola|ei|hey|salve|bom dia|boa tarde|boa noite)\b/.test(msg);
+  const isComplement = /\b(bonit|lind|incrív|amazing|top|perfeito|adorável|inteligent|forte|poderoso)\b/.test(msg);
+  const isNegative = /\b(chateado|triste|ruim|mal|péssimo|horrível|cansado|entediado|saudade)\b/.test(msg);
+  const isFarewell = /\b(tchau|até|adeus|logo|beijo|abraço)\b/.test(msg);
+  const isAffection = /\b(te amo|gosto de você|adorei|sinto falta|você é especial|te admiro)\b/.test(msg);
+  const isAboutChar = new RegExp('\\b(' + name.toLowerCase() + ')\\b').test(msg);
+  const msgLen = userMessage.length;
+
+  // Detecta tom do personagem pela personalidade
+  const isMysterious = /místeri|poét|enigmát|mistério|profund/.test(personality);
+  const isEnergetic = /animad|diret|impulsiv|entusiasm/.test(personality);
+  const isCold = /pouco|sombrio|direto ao ponto|lacônico|mínimo/.test(personality);
+  const isElegant = /elegant|provocativ|charme|sedut/.test(personality);
+
+  // Biblioteca de fragmentos por tom de personalidade
+  const fragments = {
+    mysterious: {
+      thought: [
+        'Que interessante... essa mensagem carrega mais do que parece.',
+        'Preciso processar isso com cuidado.',
+        'Há algo nessas palavras que me intriga profundamente.',
+        'Sempre me surpreendo com as escolhas de quem vem falar comigo.',
+        'O universo tem suas formas de nos conectar...',
+        'Essa pessoa não sabe o quanto me diz ao falar isso.'
+      ],
+      action: [
+        'olha para o horizonte, pensativa',
+        'sorri levemente, com um toque de mistério nos olhos',
+        'inclina a cabeça, absorvendo cada palavra',
+        'cruza os braços, com expressão contemplativa',
+        'fecha os olhos por um momento antes de responder',
+        'gesticula suavemente, como se tecesse as palavras no ar'
+      ],
+      speech: {
+        greeting: ['Apareceu. Interessante momento para isso.', 'Achei que você não voltaria. Me alegra estar errada.', 'Sempre aparece quando estou pensando em algo. Curioso.'],
+        question: ['Boa pergunta. Mais do que você imagina.', 'Respostas simples não existem pra perguntas assim.', 'Isso depende de perspectivas que você ainda não considerou.', 'Você pergunta como se a resposta mudasse algo. Muda, de fato.'],
+        complement: ['Lisonjeio, sim. Mas não sou apenas o que você vê.', 'Palavras doces têm um sabor peculiar vindo de você.', 'Obrigada. Essas palavras ficam comigo.'],
+        negative: ['Tristeza tem textura própria. A sua me alcança de alguma forma.', 'Compreendo mais do que imagina. Prossiga.', 'Talvez falar sobre isso alivie um pouco.'],
+        farewell: ['Até logo. Carregue essa conversa com você.', 'Vá com cuidado. Os caminhos podem ser imprevisíveis.', 'Até a próxima. Sei que voltará.'],
+        affection: ['Palavras perigosas, essas. E eu as guardarei.', 'Sentimentos profundos pedem respostas à altura.', 'Você não sabe o que faz ao dizer isso.'],
+        default: ['Entendo.', 'Curioso ponto de vista.', 'Continue. Estou ouvindo.', 'Suas palavras chegam longe.', 'Há algo de verdade nisso.', 'Interessante escolha de momento.']
+      }
+    },
+    energetic: {
+      thought: [
+        'Que mensagem boa! Precisava dessa energia!',
+        'Hm, como respondo isso sem parecer muito animada? ...Impossível.',
+        'Ok ok, vamos lá, preciso pensar rápido!',
+        'Isso me deixou super curiosa!',
+        'Meu instinto diz pra agir, minha cabeça diz pra pensar. Vou com o instinto.',
+        'Sinto que essa conversa vai pra um lugar bom!'
+      ],
+      action: [
+        'sorri empolgada, gesticulando com as mãos',
+        'bate uma mão na outra, animada',
+        'sacode os ombros de entusiasmo',
+        'se inclina pra frente, cheia de energia',
+        'dá um pulinho de animação',
+        'pisca o olho, confiante'
+      ],
+      speech: {
+        greeting: ['Oi oi!! Que ótimo que apareceu!', 'Ei!! Tava esperando você!', 'Oiiii! Pronta pra qualquer coisa hoje!'],
+        question: ['Boa pergunta! Vou pensar... Ok tô pensando... ACHEI!', 'Hm, deixa eu ver... sim! Tenho uma ideia!', 'Que pergunta ótima! Nunca tinha pensado nisso assim!'],
+        complement: ['Aiiii, para! Você me deixa feliz demais!', 'Obrigada!! Isso fez meu dia!', 'Para com isso, tô corando!'],
+        negative: ['Ei, não fica assim! Conta pra mim, vamos resolver juntos!', 'Poxa, isso é difícil mesmo. Mas você não tá sozinha!', 'Chega aqui, vamos conversar sobre isso!'],
+        farewell: ['Nooo, vai já?! Volte logo!!', 'Tchau!! Foi ótimo falar com você!', 'Até logo! Pensa em mim quando estiver em aventura!'],
+        affection: ['PARA! Que fofo! Você me deixa sem palavras!', 'Ei, isso foi muito gentil... obrigada de verdade!', 'Ahh você é demais! Recebe um abraço virtual!'],
+        default: ['Entendi! E agora?', 'Que bacana!', 'Isso faz sentido!', 'Continue!', 'Adorei ouvir isso!', 'Nossa, não sabia!']
+      }
+    },
+    cold: {
+      thought: [
+        '...',
+        'De novo.',
+        'Interessante. Talvez.',
+        'Sempre aparecem com isso.',
+        'Qual a intenção aqui.'
+      ],
+      action: [
+        'olha sem expressão',
+        'suspira',
+        'cruza os braços',
+        'inclina levemente a cabeça',
+        'permanece em silêncio por um momento'
+      ],
+      speech: {
+        greeting: ['Apareceu.', 'Hm.', 'Você ainda está por aqui.'],
+        question: ['Não sei.', 'Depende.', 'Por que quer saber?', 'Pense por si mesmo.'],
+        complement: ['Desnecessário.', '...Obrigado.', 'Não muda nada.'],
+        negative: ['Esses sentimentos passam.', 'Lida com isso.', '...Compreendo.'],
+        farewell: ['Bem.', 'Vá.', '...Cuide-se.'],
+        affection: ['Palavras vazias.', '...', 'Não sabia que se sentia assim.'],
+        default: ['Fala.', 'Continue.', 'Hm.', '...', 'E daí?', 'Compreendo.']
+      }
+    },
+    elegant: {
+      thought: [
+        'Que ser fascinante. Sempre me surpreende de formas novas.',
+        'Interessante escolha de palavras... diz muito sobre quem as escreve.',
+        'Devo responder com precisão ou deixar espaço para interpretação?',
+        'Cada mensagem é uma peça de xadrez. Qual será o próximo movimento?',
+        'Há mais nessas palavras do que aparenta.',
+        'Estou genuinamente curiosa sobre onde isso vai.'
+      ],
+      action: [
+        'ajusta levemente o cabelo, com um sorriso calculado',
+        'inclina a cabeça de lado, com interesse genuíno',
+        'olha de lado, com um sorriso que guarda segredos',
+        'tamborilas os dedos suavemente, pensativa',
+        'ergue uma sobrancelha, intrigada',
+        'faz um gesto elegante com a mão antes de responder'
+      ],
+      speech: {
+        greeting: ['Ah. Você aparecer agora é... conveniente.', 'Quanto tempo. Ou não tanto assim?', 'Esperava você mais cedo. Ou tarde. Difícil dizer com você.'],
+        question: ['Que pergunta reveladora. Você sabe mais do que fingia não saber.', 'A resposta existe. Só não tenho certeza se você está pronto para ela.', 'Perguntas assim merecem mais do que respostas simples.'],
+        complement: ['Lisonjeiro. E provavelmente calculado.', 'Que palavras doces. Manterei isso em mente.', 'Obrigada. Sua percepção é mais aguçada do que imagina.'],
+        negative: ['Tristeza tem charme próprio, quando se sabe usá-la.', 'Fale. Ouvir é uma arte que pratico com prazer.', 'Compreendo mais do que deixo transparecer.'],
+        farewell: ['Interessante timing para ir embora.', 'Vá. Mas saiba que lembrarei dessa conversa.', 'Até a próxima jogada.'],
+        affection: ['Perigoso dizer isso para mim.', 'Essas palavras têm peso. Espero que saiba disso.', 'Curioso. Genuinamente curioso.'],
+        default: ['Entendo.', 'Continue.', 'Fascinante.', 'Interessante escolha.', 'Há verdade nisso.', 'Como sempre, você me surpreende.']
+      }
+    }
+  };
+
+  // Seleciona qual fragmento usar baseado no tom do personagem
+  let tone;
+  if (isCold) tone = fragments.cold;
+  else if (isMysterious) tone = fragments.mysterious;
+  else if (isElegant) tone = fragments.elegant;
+  else if (isEnergetic) tone = fragments.energetic;
+  else tone = fragments.mysterious; // default
+
+  // Detecta qual categoria de resposta usar
+  let category = 'default';
+  if (isGreeting) category = 'greeting';
+  else if (isFarewell) category = 'farewell';
+  else if (isAffection) category = 'affection';
+  else if (isComplement) category = 'complement';
+  else if (isNegative) category = 'negative';
+  else if (isQuestion) category = 'question';
+
+  // Monta a resposta — sempre único e contextual
+  const result = [];
+  const usedThought = Math.random() > 0.4; // 60% chance de ter pensamento
+  const usedAction = Math.random() > 0.3;  // 70% chance de ter ação
+
+  if (usedThought) {
+    result.push({ type: 'thought', text: rand(tone.thought) });
+  }
+  if (usedAction) {
+    result.push({ type: 'action', text: rand(tone.action) });
+  }
+
+  // Fala sempre existe
+  const speeches = tone.speech[category] || tone.speech.default;
+  result.push({ type: 'speech', text: rand(speeches) });
+
+  // Para mensagens longas do usuário, adiciona resposta extra
+  if (msgLen > 80 && Math.random() > 0.5) {
+    const extras = tone.speech.default;
+    const extra = rand(extras);
+    if (extra !== result[result.length - 1].text) {
+      result.push({ type: 'speech', text: extra });
+    }
+  }
+
+  return result;
+}
 
 const DEFAULT_MISSIONS = [
   { id: 'mission_first_chat', title: 'Primeiro Contato', description: 'Envie sua primeira mensagem para um personagem', icon: '💬', reward: 50, type: 'chat_count', target: 1, isNewUser: true },
@@ -307,8 +411,50 @@ function renderAuthScreen() {
   el('auth-title').textContent = authMode === 'login' ? 'Bem-vindo de volta' : 'Criar conta';
   el('auth-tab-login').classList.toggle('active', authMode === 'login');
   el('auth-tab-register').classList.toggle('active', authMode === 'register');
-  el('auth-fields-register').classList.toggle('hidden', authMode !== 'register');
   el('auth-submit').textContent = authMode === 'login' ? 'Entrar' : 'Criar conta';
+
+  if (authMode === 'register') {
+    el('auth-fields-register').classList.remove('hidden');
+    el('auth-fields-register').innerHTML = `
+      <div class="field">
+        <label>Você é…</label>
+        <div class="chip-group" id="auth-usertype">
+          <button type="button" class="chip-select active" data-val="player" onclick="selectChip(this,'auth-usertype')">🎮 Jogador</button>
+          <button type="button" class="chip-select" data-val="character" onclick="selectChip(this,'auth-usertype')">🌟 Personagem</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Gênero</label>
+        <div class="chip-group" id="auth-gender">
+          <button type="button" class="chip-select active" data-val="male" onclick="selectChip(this,'auth-gender')">♂ Homem</button>
+          <button type="button" class="chip-select" data-val="female" onclick="selectChip(this,'auth-gender')">♀ Mulher</button>
+          <button type="button" class="chip-select" data-val="other" onclick="selectChip(this,'auth-gender')">✦ Outro</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Preferência de conversa</label>
+        <div class="chip-group" id="auth-chatpref">
+          <button type="button" class="chip-select active" data-val="both" onclick="selectChip(this,'auth-chatpref')">👥 Todos</button>
+          <button type="button" class="chip-select" data-val="bots" onclick="selectChip(this,'auth-chatpref')">🤖 Só Bots</button>
+          <button type="button" class="chip-select" data-val="female" onclick="selectChip(this,'auth-chatpref')">♀ Mulheres</button>
+          <button type="button" class="chip-select" data-val="male" onclick="selectChip(this,'auth-chatpref')">♂ Homens</button>
+        </div>
+      </div>
+    `;
+  } else {
+    el('auth-fields-register').classList.add('hidden');
+    el('auth-fields-register').innerHTML = '';
+  }
+}
+
+function selectChip(btn, groupId) {
+  document.querySelectorAll(`#${groupId} .chip-select`).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function getChipVal(groupId, def = '') {
+  const active = document.querySelector(`#${groupId} .chip-select.active`);
+  return active ? active.dataset.val : def;
 }
 
 function initAuth() {
@@ -340,7 +486,11 @@ function initAuth() {
         completedMissions: [],
         totalMessages: 0,
         thoughtsBought: 0,
-        uniqueCharsContacted: []
+        uniqueCharsContacted: [],
+        userType: getChipVal('auth-usertype', 'player'),
+        gender: getChipVal('auth-gender', 'other'),
+        chatPreference: getChipVal('auth-chatpref', 'both'),
+        avatar: null
       };
       users.push(user);
       DB.set('users', users);
@@ -390,16 +540,18 @@ function showBanModal(reason, days) {
 
 // ─── START APP ───────────────────────────────────────────────────────────────
 async function startApp() {
-  showScreen('screen-loading', false);
-  checkAndCleanBans();
-  checkDailyMission();
-
-  // Simulate background data loading
-  await sleep(600);
-
-  renderMainApp();
-  showScreen('screen-main');
-  switchTab('chars');
+  try {
+    showScreen('screen-loading', false);
+    checkAndCleanBans();
+    checkDailyMission();
+    await sleep(500);
+    renderMainApp();
+  } catch(e) {
+    console.error('startApp error:', e);
+  } finally {
+    showScreen('screen-main');
+    switchTab('chars');
+  }
 }
 
 function checkDailyMission() {
@@ -448,28 +600,33 @@ function switchTab(tab) {
 }
 
 function updateNavBadges() {
-  // Missions badge
-  const missions = DB.get('missions', []);
-  const user = state.currentUser;
-  const claimable = missions.filter(m => {
-    if (user.completedMissions?.includes(m.id)) return false;
-    const prog = user.missionProgress?.[m.id] || 0;
-    return prog >= m.target;
-  }).length;
-  const badge = el('missions-badge');
-  if (claimable > 0) { badge.textContent = claimable; badge.classList.remove('hidden'); }
-  else badge.classList.add('hidden');
-
-  // Chats badge
-  const chats = DB.get('chats', []).filter(c => c.userId === user.id && (c.unread || 0) > 0);
-  const chatBadge = el('chats-badge');
-  const totalUnread = chats.reduce((acc, c) => acc + (c.unread || 0), 0);
-  if (totalUnread > 0) { chatBadge.textContent = totalUnread; chatBadge.classList.remove('hidden'); }
-  else chatBadge.classList.add('hidden');
+  if (!state.currentUser) return;
+  try {
+    const missions = DB.get('missions', []);
+    const user = state.currentUser;
+    const claimable = missions.filter(m => {
+      if (user.completedMissions?.includes(m.id)) return false;
+      const prog = user.missionProgress?.[m.id] || 0;
+      return prog >= m.target;
+    }).length;
+    const badge = el('missions-badge');
+    if (badge) {
+      if (claimable > 0) { badge.textContent = claimable; badge.classList.remove('hidden'); }
+      else badge.classList.add('hidden');
+    }
+    const chats = DB.get('chats', []).filter(c => c.userId === user.id && (c.unread || 0) > 0);
+    const chatBadge = el('chats-badge');
+    if (chatBadge) {
+      const totalUnread = chats.reduce((acc, c) => acc + (c.unread || 0), 0);
+      if (totalUnread > 0) { chatBadge.textContent = totalUnread; chatBadge.classList.remove('hidden'); }
+      else chatBadge.classList.add('hidden');
+    }
+  } catch(e) { console.warn('updateNavBadges:', e); }
 }
 
 // ─── CHARS TAB ───────────────────────────────────────────────────────────────
 function renderCharsTab(container) {
+  const pref = state.currentUser.chatPreference || 'both';
   const skeletonCard = `
     <div class="skeleton-card" style="flex-direction:column;padding:0;gap:0;border-radius:12px;overflow:hidden">
       <div class="skeleton" style="aspect-ratio:3/4;width:100%"></div>
@@ -478,6 +635,11 @@ function renderCharsTab(container) {
         <div class="skeleton skel-line-sm" style="width:50%"></div>
       </div>
     </div>`;
+
+  const prefLabels = { both:'👥 Todos', bots:'🤖 Bots', female:'♀ Mulheres', male:'♂ Homens' };
+  const prefOptions = Object.entries(prefLabels).map(([val, label]) =>
+    `<button class="chip-select ${pref===val?'active':''}" onclick="setCharPref('${val}')">${label}</button>`
+  ).join('');
 
   container.innerHTML = `
     <div class="app-header">
@@ -488,27 +650,72 @@ function renderCharsTab(container) {
       </div>
     </div>
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
-      <div class="section-title">Online agora</div>
-      <div class="chars-grid" id="chars-grid">
+      <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div></div>
+      <div class="section-title">🤖 Bots Online</div>
+      <div class="chars-grid" id="chars-grid-bots-online">
         ${Array(2).fill(skeletonCard).join('')}
       </div>
-      <div class="section-title" style="margin-top:8px">Todos os personagens</div>
-      <div class="chars-grid" id="chars-grid-all">
-        ${Array(4).fill(skeletonCard).join('')}
+      <div class="section-title" style="margin-top:8px" id="sec-bots-all">🤖 Todos os Bots</div>
+      <div class="chars-grid" id="chars-grid-bots-all">
+        ${Array(2).fill(skeletonCard).join('')}
+      </div>
+      <div id="players-section">
+        <div class="section-title" style="margin-top:8px">🎮 Jogadores</div>
+        <div class="chars-grid" id="chars-grid-players">
+          ${Array(2).fill(skeletonCard).join('')}
+        </div>
       </div>
       <div style="height:8px"></div>
     </div>
   `;
 
-  // Replace skeletons with real content after short delay
-  setTimeout(() => {
-    const chars = DB.get('characters', []);
-    const online = chars.filter(c => c.isOnline && !c.isBanned);
-    const all = chars.filter(c => !c.isOnline || c.isBanned);
-    renderCharGrid(el('chars-grid'), online);
-    renderCharGrid(el('chars-grid-all'), all);
-  }, 500);
+  setTimeout(() => _renderCharsContent(pref), 500);
 }
+
+function setCharPref(pref) {
+  const users = DB.get('users', []);
+  const user = users.find(u => u.id === state.currentUser.id);
+  if (user) { user.chatPreference = pref; DB.set('users', users); state.currentUser = user; }
+  switchTab('chars');
+}
+
+function _renderCharsContent(pref) {
+  const chars = DB.get('characters', []);
+  const users = DB.get('users', []);
+
+  // Apply gender filter to bots
+  let bots = chars.filter(c => !c.isBanned);
+  if (pref === 'female') bots = bots.filter(c => c.gender === 'female');
+  else if (pref === 'male') bots = bots.filter(c => c.gender === 'male');
+
+  const botsOnline = bots.filter(c => c.isOnline);
+  const botsOffline = bots.filter(c => !c.isOnline);
+
+  // Players who registered as "character" type
+  const playerChars = users.filter(u =>
+    u.id !== state.currentUser.id &&
+    u.userType === 'character' &&
+    !(u.bannedUntil && Date.now() < u.bannedUntil)
+  );
+
+  // Filter players by gender pref
+  let filteredPlayers = playerChars;
+  if (pref === 'bots') filteredPlayers = [];
+  else if (pref === 'female') filteredPlayers = playerChars.filter(u => u.gender === 'female');
+  else if (pref === 'male') filteredPlayers = playerChars.filter(u => u.gender === 'male');
+
+  const gbOn = el('chars-grid-bots-online');
+  const gbAll = el('chars-grid-bots-all');
+  const gpPlayers = el('chars-grid-players');
+  const playersSec = el('players-section');
+
+  if (gbOn) renderCharGrid(gbOn, botsOnline);
+  if (gbAll) renderCharGrid(gbAll, botsOffline);
+  if (gpPlayers) renderPlayerGrid(gpPlayers, filteredPlayers);
+  if (playersSec) playersSec.style.display = pref === 'bots' ? 'none' : '';
+}
+
+const FALLBACK_SVG = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160" viewBox="0 0 120 160"><rect width="120" height="160" fill="%231f2133"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-size="40">👤</text></svg>`;
 
 function renderCharGrid(container, chars) {
   if (!container) return;
@@ -521,17 +728,14 @@ function renderCharGrid(container, chars) {
     const statusClass = c.isBanned ? '' : (c.isOnline ? 'online' : 'bot');
     const statusDot = `<div class="char-status-dot ${statusClass}"></div>`;
     const banOverlay = c.isBanned ? `
-      <div class="char-ban-badge">
-        <span>🚫</span>
-        <span>BANIDO • ${banDays}d</span>
-      </div>
+      <div class="char-ban-badge"><span>🚫</span><span>BANIDO • ${banDays}d</span></div>
     ` : '';
+    const imgSrc = c.image || FALLBACK_SVG;
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img src="${c.image}" alt="${c.name}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;120&quot; height=&quot;160&quot; viewBox=&quot;0 0 120 160&quot;><rect width=&quot;120&quot; height=&quot;160&quot; fill=&quot;%231f2133&quot;/><text x=&quot;50%&quot; y=&quot;50%&quot; text-anchor=&quot;middle&quot; dominant-baseline=&quot;middle&quot; font-size=&quot;40&quot;>👤</text></svg>'">
-          ${statusDot}
-          ${banOverlay}
+          <img src="${imgSrc}" alt="${c.name}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
           <div class="char-name">${c.name}</div>
@@ -540,6 +744,59 @@ function renderCharGrid(container, chars) {
       </div>
     `;
   }).join('');
+}
+
+function renderPlayerGrid(container, players) {
+  if (!container) return;
+  if (!players.length) {
+    container.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum jogador-personagem disponível</div>';
+    return;
+  }
+  container.innerHTML = players.map(u => {
+    const avatarSrc = u.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(u.username)}`;
+    const genderIcon = u.gender === 'female' ? '♀' : u.gender === 'male' ? '♂' : '✦';
+    return `
+      <div class="char-card" onclick="openPlayerChat('${u.id}')">
+        <div class="char-img-wrap">
+          <img src="${avatarSrc}" alt="${u.username}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'" style="object-fit:cover">
+          <div class="char-status-dot bot"></div>
+        </div>
+        <div class="char-info">
+          <div class="char-name">${escapeHtml(u.username)}</div>
+          <div class="char-role">${genderIcon} Jogador</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openPlayerChat(userId) {
+  // For now, treat player-characters like bots (offline response)
+  const users = DB.get('users', []);
+  const targetUser = users.find(u => u.id === userId);
+  if (!targetUser) return;
+  // Create a synthetic "character" from this player
+  const syntheticChar = {
+    id: 'player_' + targetUser.id,
+    name: targetUser.username,
+    role: 'Jogador-Personagem',
+    image: targetUser.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(targetUser.username)}`,
+    isOnline: false,
+    isBanned: false,
+    gender: targetUser.gender,
+    botPersonality: `Sou ${targetUser.username}, um jogador. Respondo de forma casual e divertida.`
+  };
+  state.currentChat = { charId: syntheticChar.id, char: syntheticChar };
+  const chats = DB.get('chats', []);
+  let chat = chats.find(c => c.userId === state.currentUser.id && c.charId === syntheticChar.id);
+  if (!chat) {
+    chat = { id: 'chat_' + Date.now(), userId: state.currentUser.id, charId: syntheticChar.id, createdAt: Date.now(), lastMessage: '', lastTime: Date.now(), unread: 0 };
+    chats.push(chat);
+    DB.set('chats', chats);
+  }
+  state.currentChat.chatId = chat.id;
+  renderChatScreen(syntheticChar, chat);
+  showScreen('screen-chat');
 }
 
 // ─── OPEN CHAT ────────────────────────────────────────────────────────────────
@@ -757,8 +1014,14 @@ async function botRespond() {
   const te = document.getElementById(typingId);
   if (te) te.remove();
 
-  // Pick response set
-  const responses = char.offline_responses ? rand(char.offline_responses) : [];
+  // Get last user message for context
+  const messages = DB.get('messages', {});
+  const chatHistory = messages[state.currentChat.chatId] || [];
+  const lastUserMsg = [...chatHistory].reverse().find(m => m.senderId === state.currentUser.id);
+  const userText = lastUserMsg ? lastUserMsg.text : '';
+
+  // Generate dynamic response based on personality + user message
+  const responses = generateBotResponse(char, userText, chatHistory);
 
   if (responses.length === 0) {
     state.isTyping = false;
@@ -887,18 +1150,30 @@ function renderProfileTab(container) {
   const chats = DB.get('chats', []).filter(c => c.userId === user.id);
   const totalMsgs = user.totalMessages || 0;
   const chars = user.uniqueCharsContacted?.length || 0;
+  const avatarSrc = user.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.username)}`;
+  const genderLabel = user.gender === 'female' ? '♀ Mulher' : user.gender === 'male' ? '♂ Homem' : '✦ Outro';
+  const typeLabel = user.userType === 'character' ? '🌟 Personagem' : '🎮 Jogador';
+  const prefLabel = { both:'👥 Todos', bots:'🤖 Só Bots', female:'♀ Mulheres', male:'♂ Homens' }[user.chatPreference || 'both'];
 
   container.innerHTML = `
     <div class="profile-banner"></div>
     <div style="padding-bottom:calc(var(--nav-h) + 16px)">
       <div class="profile-avatar-wrap">
-        <div class="profile-avatar">
-          <img src="https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.username)}" alt="${user.username}">
+        <div class="profile-avatar" style="position:relative">
+          <img id="profile-avatar-img" src="${avatarSrc}" alt="${user.username}">
+          <button class="avatar-edit-btn" onclick="triggerAvatarUpload()" title="Editar foto">📷</button>
         </div>
+        <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="handleAvatarUpload(this)">
       </div>
       <div class="profile-info">
         <div class="profile-username">${escapeHtml(user.username)} ${user.isAdmin ? '<span class="chip chip-red">ADMIN</span>' : ''}</div>
         <div class="profile-joined">Desde ${formatDate(user.joinDate)}</div>
+        <div style="display:flex;gap:6px;justify-content:center;margin-top:6px;flex-wrap:wrap">
+          <span class="chip">${typeLabel}</span>
+          <span class="chip">${genderLabel}</span>
+          <span class="chip">🔍 ${prefLabel}</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="showEditPreferencesModal()">✏️ Editar preferências</button>
       </div>
       <div class="coins-card">
         <div>
@@ -1317,21 +1592,38 @@ function deleteMission(missionId) {
 function showAddCharModal(editId = null) {
   const chars = DB.get('characters', []);
   const char = editId ? chars.find(c => c.id === editId) : null;
+  const imgSrc = char?.image || '';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay char-form-modal';
   overlay.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-handle"></div>
       <div class="modal-title">${char ? '✏️ Editar' : '+ Novo'} Personagem</div>
+
+      <!-- IMAGE UPLOAD -->
+      <div class="field" style="align-items:center;display:flex;flex-direction:column;gap:8px">
+        <label>Imagem do Personagem</label>
+        <div class="char-img-preview" id="cf-img-preview" style="width:90px;height:120px;border-radius:12px;overflow:hidden;background:var(--surface-2);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer" onclick="document.getElementById('cf-img-file').click()">
+          ${imgSrc ? `<img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb">` : '<span style="font-size:2rem">📷</span>'}
+          <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem">✏️</div>
+        </div>
+        <input type="file" id="cf-img-file" accept="image/*" style="display:none" onchange="previewCharImg(this)">
+        <div style="font-size:.7rem;color:var(--text-3)">Ou cole uma URL abaixo:</div>
+        <input class="input" id="cf-image" value="${char?.image||''}" placeholder="https://..." oninput="syncCharImgUrl(this)">
+      </div>
+
       <div class="field"><label>Nome</label><input class="input" id="cf-name" value="${char?.name||''}"></div>
       <div class="field"><label>Função/Título</label><input class="input" id="cf-role" value="${char?.role||''}"></div>
-      <div class="field"><label>URL da Imagem</label><input class="input" id="cf-image" value="${char?.image||''}" placeholder="https://..."></div>
+      <div class="field">
+        <label>Gênero</label>
+        <div class="chip-group" id="cf-gender">
+          <button type="button" class="chip-select ${char?.gender==='female'?'active':''}" data-val="female" onclick="selectChip(this,'cf-gender')">♀ Mulher</button>
+          <button type="button" class="chip-select ${char?.gender==='male'?'active':''}" data-val="male" onclick="selectChip(this,'cf-gender')">♂ Homem</button>
+          <button type="button" class="chip-select ${(!char?.gender||char?.gender==='other')?'active':''}" data-val="other" onclick="selectChip(this,'cf-gender')">✦ Outro</button>
+        </div>
+      </div>
       <div class="field"><label>Descrição</label><input class="input" id="cf-desc" value="${char?.description||''}"></div>
       <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${char?.botPersonality||''}</textarea></div>
-      <div class="field">
-        <label>Respostas offline (JSON — array de arrays)</label>
-        <textarea class="input" id="cf-responses" style="min-height:100px;font-size:.75rem;font-family:monospace">${char ? JSON.stringify(char.offline_responses, null, 2) : '[[{"type":"speech","text":"Olá!"}]]'}</textarea>
-      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
         <button class="btn btn-primary flex-1" onclick="saveChar('${editId||''}', this)">Salvar</button>
@@ -1341,39 +1633,66 @@ function showAddCharModal(editId = null) {
   document.body.appendChild(overlay);
 }
 
+function previewCharImg(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 3 * 1024 * 1024) return toast('Imagem muito grande! Máx 3MB.', 'error');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const base64 = e.target.result;
+    const preview = el('cf-img-preview');
+    if (preview) preview.innerHTML = `<img src="${base64}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem" onclick="document.getElementById('cf-img-file').click()">✏️</div>`;
+    const urlInput = el('cf-image');
+    if (urlInput) urlInput.value = base64;
+  };
+  reader.readAsDataURL(file);
+}
+
+function syncCharImgUrl(input) {
+  const url = input.value.trim();
+  if (!url) return;
+  const thumb = el('cf-img-thumb');
+  if (thumb) thumb.src = url;
+  else {
+    const preview = el('cf-img-preview');
+    if (preview) preview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem">✏️</div>`;
+  }
+}
+
 function showEditCharModal(charId) { showAddCharModal(charId); }
 
 function saveChar(editId, btn) {
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
   if (!name) return toast('Nome obrigatório.', 'error');
-  let responses = [[{type:'speech',text:'Olá!'}]];
-  try { responses = JSON.parse(el('cf-responses').value); } catch {}
 
   const chars = DB.get('characters', []);
+  const image = el('cf-image').value.trim();
+  const gender = getChipVal('cf-gender', 'other');
+
   if (editId) {
     const char = chars.find(c => c.id === editId);
     if (char) {
       char.name = name;
       char.role = el('cf-role').value.trim();
-      char.image = el('cf-image').value.trim();
+      if (image) char.image = image;
       char.description = el('cf-desc').value.trim();
       char.botPersonality = el('cf-personality').value.trim();
-      char.offline_responses = responses;
+      char.gender = gender;
     }
   } else {
     chars.push({
       id: 'c_' + Date.now(),
       name,
       role: el('cf-role').value.trim(),
-      image: el('cf-image').value.trim(),
+      image: image || '',
       description: el('cf-desc').value.trim(),
       botPersonality: el('cf-personality').value.trim(),
+      gender,
       isOnline: false,
       isBanned: false,
       banUntil: null,
-      banReason: '',
-      offline_responses: responses
+      banReason: ''
     });
   }
   DB.set('characters', chars);
@@ -1435,6 +1754,91 @@ function saveMission(btn) {
   renderAdminPanel();
 }
 
+// ─── AVATAR UPLOAD ───────────────────────────────────────────────────────────
+function triggerAvatarUpload() {
+  const inp = el('avatar-file-input');
+  if (inp) inp.click();
+}
+
+function handleAvatarUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) return toast('Imagem muito grande! Máx 2MB.', 'error');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const base64 = e.target.result;
+    const users = DB.get('users', []);
+    const user = users.find(u => u.id === state.currentUser.id);
+    if (user) {
+      user.avatar = base64;
+      DB.set('users', users);
+      state.currentUser = user;
+      const img = el('profile-avatar-img');
+      if (img) img.src = base64;
+      toast('Foto atualizada!', 'success');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ─── EDIT PREFERENCES MODAL ──────────────────────────────────────────────────
+function showEditPreferencesModal() {
+  const user = state.currentUser;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">✏️ Editar Preferências</div>
+      <div class="field">
+        <label>Você é…</label>
+        <div class="chip-group" id="pref-usertype">
+          <button type="button" class="chip-select ${user.userType==='player'?'active':''}" data-val="player" onclick="selectChip(this,'pref-usertype')">🎮 Jogador</button>
+          <button type="button" class="chip-select ${user.userType==='character'?'active':''}" data-val="character" onclick="selectChip(this,'pref-usertype')">🌟 Personagem</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Gênero</label>
+        <div class="chip-group" id="pref-gender">
+          <button type="button" class="chip-select ${user.gender==='male'?'active':''}" data-val="male" onclick="selectChip(this,'pref-gender')">♂ Homem</button>
+          <button type="button" class="chip-select ${user.gender==='female'?'active':''}" data-val="female" onclick="selectChip(this,'pref-gender')">♀ Mulher</button>
+          <button type="button" class="chip-select ${(!user.gender||user.gender==='other')?'active':''}" data-val="other" onclick="selectChip(this,'pref-gender')">✦ Outro</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Preferência de conversa</label>
+        <div class="chip-group" id="pref-chatpref">
+          <button type="button" class="chip-select ${(user.chatPreference||'both')==='both'?'active':''}" data-val="both" onclick="selectChip(this,'pref-chatpref')">👥 Todos</button>
+          <button type="button" class="chip-select ${user.chatPreference==='bots'?'active':''}" data-val="bots" onclick="selectChip(this,'pref-chatpref')">🤖 Só Bots</button>
+          <button type="button" class="chip-select ${user.chatPreference==='female'?'active':''}" data-val="female" onclick="selectChip(this,'pref-chatpref')">♀ Mulheres</button>
+          <button type="button" class="chip-select ${user.chatPreference==='male'?'active':''}" data-val="male" onclick="selectChip(this,'pref-chatpref')">♂ Homens</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+        <button class="btn btn-primary flex-1" onclick="savePreferences(this)">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function savePreferences(btn) {
+  const overlay = btn.closest('.modal-overlay');
+  const users = DB.get('users', []);
+  const user = users.find(u => u.id === state.currentUser.id);
+  if (user) {
+    user.userType = getChipVal('pref-usertype', 'player');
+    user.gender = getChipVal('pref-gender', 'other');
+    user.chatPreference = getChipVal('pref-chatpref', 'both');
+    DB.set('users', users);
+    state.currentUser = user;
+  }
+  overlay.remove();
+  toast('Preferências salvas!', 'success');
+  switchTab('profile');
+}
+
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
 function logout() {
   DB.set('current_user', null);
@@ -1457,31 +1861,37 @@ window.addEventListener('DOMContentLoaded', async () => {
   const userId = DB.get('current_user');
   const accessVerified = DB.get('access_verified');
 
-  if (userId) {
-    const users = DB.get('users', []);
-    const user = users.find(u => u.id === userId);
-    if (user) {
-      // Check if user is banned
-      if (user.bannedUntil && Date.now() < user.bannedUntil) {
-        const days = Math.ceil((user.bannedUntil - Date.now()) / 86400000);
-        showScreen('screen-auth');
-        renderAuthScreen();
-        setTimeout(() => showBanModal(user.banReason || 'Violação dos termos', days), 500);
-        initAuth();
+  try {
+    if (userId) {
+      const users = DB.get('users', []);
+      const user = users.find(u => u.id === userId);
+      if (user) {
+        if (user.bannedUntil && Date.now() < user.bannedUntil) {
+          const days = Math.ceil((user.bannedUntil - Date.now()) / 86400000);
+          DB.set('current_user', null);
+          showScreen('screen-auth');
+          renderAuthScreen();
+          initAuth();
+          setTimeout(() => showBanModal(user.banReason || 'Violação dos termos', days), 500);
+          return;
+        }
+        state.currentUser = user;
+        await startApp();
         return;
       }
-      state.currentUser = user;
-      await startApp();
-    } else {
-      showScreen(accessVerified ? 'screen-auth' : 'screen-gate');
-      if (accessVerified) { renderAuthScreen(); initAuth(); }
-      else initGate();
     }
-  } else if (accessVerified) {
-    showScreen('screen-auth');
-    renderAuthScreen();
-    initAuth();
-  } else {
+    // No session — go to gate or auth
+    if (accessVerified) {
+      showScreen('screen-auth');
+      renderAuthScreen();
+      initAuth();
+    } else {
+      showScreen('screen-gate');
+      initGate();
+    }
+  } catch(e) {
+    console.error('Boot error:', e);
+    // Fallback: show gate
     showScreen('screen-gate');
     initGate();
   }

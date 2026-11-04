@@ -1052,6 +1052,61 @@ img { display: block; }
 .form-row { display: flex; gap: 10px; }
 .form-row .field { flex: 1; }
 
+/* ========= CHIP SELECT (pref filter) ========= */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-select {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.chip-select.active {
+  border-color: var(--accent);
+  background: rgba(139,92,246,.15);
+  color: var(--accent-2);
+}
+.chip-select:active { transform: scale(.95); }
+
+/* ========= PROFILE AVATAR EDIT BUTTON ========= */
+.avatar-edit-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-0);
+  font-size: .75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .15s;
+  z-index: 2;
+  line-height: 1;
+  padding: 0;
+}
+.avatar-edit-btn:active { transform: scale(.9); }
+
+/* ========= PROFILE CHIPS & EDIT ========= */
+.profile-info { padding: 12px 20px 20px; display: flex; flex-direction: column; align-items: flex-start; }
+.profile-info .chip {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+
 /* ========= LOADING SCREEN ========= */
 #screen-loading {
   align-items: center;
