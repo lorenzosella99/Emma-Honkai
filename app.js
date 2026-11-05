@@ -158,6 +158,7 @@ function profileToAppUser(p) {
     assignedCharacterId: p.assigned_character_id || null,
     characterRequest: { status: p.character_request_status || 'none', requestedAt: p.character_request_at ? Date.parse(p.character_request_at) : null },
     joinDate: p.created_at ? Date.parse(p.created_at) : Date.now(),
+    lastSeenAt: p.last_seen_at ? Date.parse(p.last_seen_at) : 0,
     coins: Number(p.coins ?? cfg().startingCoins), totalMessages: 0,
     thoughtsBought: 0, uniqueCharsContacted: [], missionProgress: {}, completedMissions: []
   };
@@ -173,7 +174,14 @@ async function loadEmmaBackendState() {
     emmaSupabase.from('character_applications').select('*')
   ]);
   for (const x of [pr,cr,hr,mr,rr,ar]) if (x.error) throw x.error;
-  const users = (pr.data || []).map(profileToAppUser);
+  const localUsers = DB.get('users', []);
+  const users = (pr.data || []).map(p => {
+    const fresh = profileToAppUser(p), cached = localUsers.find(u => u.id === p.id);
+    return cached ? { ...fresh, coins: cached.coins ?? fresh.coins, totalMessages: cached.totalMessages || 0,
+      thoughtsBought: cached.thoughtsBought || 0, uniqueCharsContacted: cached.uniqueCharsContacted || [],
+      missionProgress: cached.missionProgress || {}, completedMissions: cached.completedMissions || [],
+      thoughtSubscription: cached.thoughtSubscription || null } : fresh;
+  });
   const characters = (cr.data || []).map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', isBanned:!!c.is_banned,
@@ -1049,6 +1057,7 @@ function _renderCharsContent(pref) {
   const playerChars = users.filter(u =>
     u.id !== state.currentUser.id &&
     u.userType === 'character' &&
+    chars.some(c => c.ownerUserId === u.id) &&
     !(u.bannedUntil && Date.now() < u.bannedUntil)
   );
 
@@ -1158,33 +1167,22 @@ function openPlayerChat(userId) {
 }
 
 // ─── OPEN CHAT ────────────────────────────────────────────────────────────────
-function openChat(charId) {
+async function openChat(charId) {
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
   if (!char || char.isBanned) return;
-
   state.currentChat = { charId, char };
-
-  // Find or create chat
-  const chats = DB.get('chats', []);
-  let chat = chats.find(c => c.userId === state.currentUser.id && c.charId === charId);
-  if (!chat) {
-    chat = {
-      id: 'chat_' + Date.now(),
-      userId: state.currentUser.id,
-      charId,
-      createdAt: Date.now(),
-      lastMessage: '',
-      lastTime: Date.now(),
-      unread: 0
-    };
-    chats.push(chat);
-    DB.set('chats', chats);
-  }
-  state.currentChat.chatId = chat.id;
-
-  renderChatScreen(char, chat);
-  showScreen('screen-chat');
+  try {
+    const result = await emmaApi('create_chat', { characterId: charId });
+    const row = result.chat;
+    const chat = { id:row.id, userId:row.user_id, charId:row.character_id,
+      createdAt:Date.parse(row.created_at), lastMessage:row.last_message || '',
+      lastTime:Date.parse(row.last_time || row.created_at), unread:row.unread || 0 };
+    const chats = DB.get('chats', []).filter(c => c.id !== chat.id);
+    chats.push(chat); DB.set('chats', chats);
+    state.currentChat.chatId = chat.id;
+    renderChatScreen(char, chat); showScreen('screen-chat');
+  } catch(e) { toast(e.message || 'Não foi possível abrir a conversa.', 'error'); }
 }
 
 function renderChatScreen(char, chat) {
@@ -1473,22 +1471,32 @@ function addMessage(msg) {
   if (!messages[msg.chatId]) messages[msg.chatId] = [];
   messages[msg.chatId].push(msg);
   DB.set('messages', messages);
-
-  // Update chat last message
   const chats = DB.get('chats', []);
   const chat = chats.find(c => c.id === msg.chatId);
   if (chat) {
-    chat.lastMessage = msg.text.substring(0, 60);
-    chat.lastTime = msg.timestamp;
+    chat.lastMessage = msg.text.substring(0, 60); chat.lastTime = msg.timestamp;
     if (msg.isBot || msg.senderId !== chat.userId) chat.unread = (chat.unread || 0) + 1;
     DB.set('chats', chats);
   }
-
-  // Render message
+  // Persist through RLS-protected tables; bot replies are validated server-side.
+  (async () => {
+    try {
+      if (msg.isBot) {
+        await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
+      } else if (msg.senderId === state.currentUser.id) {
+        const { error } = await emmaSupabase.from('messages').insert({
+          id: msg.id, chat_id: msg.chatId, sender_user_id: state.currentUser.id,
+          message_type: msg.type || 'speech', body: msg.text, is_bot: false,
+          created_at: new Date(msg.timestamp).toISOString()
+        });
+        if (error) throw error;
+        await emmaSupabase.from('chats').update({ last_message: msg.text.slice(0,60), last_time: new Date(msg.timestamp).toISOString() }).eq('id', msg.chatId);
+      }
+    } catch(e) { console.error('Message sync failed:', e); toast('Mensagem não sincronizada: ' + e.message, 'error'); }
+  })();
   const container = el('chat-messages');
-  const msgEl = document.createElement('div');
-  msgEl.innerHTML = renderMessage(msg);
-  container.appendChild(msgEl.firstElementChild);
+  const msgEl = document.createElement('div'); msgEl.innerHTML = renderMessage(msg);
+  if (msgEl.firstElementChild) container.appendChild(msgEl.firstElementChild);
   container.scrollTop = container.scrollHeight;
 }
 
@@ -2442,7 +2450,9 @@ function savePreferences(btn) {
 }
 
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
-function logout() {
+async function logout() {
+  try { await emmaSupabase?.auth.signOut(); } catch {}
+  if (emmaRealtimeChannel) { try { await emmaSupabase.removeChannel(emmaRealtimeChannel); } catch {} emmaRealtimeChannel = null; }
   const owned = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser?.id);
   if (owned) { owned.isOnline = false; const chars = DB.get('characters', []); DB.set('characters', chars); }
   const presenceUsers = DB.get('users', []), leaving = presenceUsers.find(u => u.id === state.currentUser?.id);
@@ -2465,48 +2475,36 @@ function autoResize(ta) {
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
-  // Tenta sincronizar dados do GitHub antes de inicializar
-  // (silent — continua mesmo se GitHub estiver offline)
   try {
     const loadingMsg = el('loading-status');
-    if (loadingMsg) loadingMsg.textContent = 'Sincronizando dados...';
-    await Promise.race([
-      ghPull(),
-      new Promise(r => setTimeout(r, 4000)) // timeout 4s
-    ]);
+    if (loadingMsg) loadingMsg.textContent = 'Conectando ao servidor seguro...';
+    await Promise.race([ghPull(), new Promise(r => setTimeout(r, 2500))]);
   } catch {}
-
   initData();
-
-  const userId = DB.get('current_user');
-
   try {
-    if (userId) {
-      const users = DB.get('users', []);
-      const user = users.find(u => u.id === userId);
+    const { data: { session } } = await emmaSupabase.auth.getSession();
+    if (session) {
+      const { data: authData, error } = await emmaSupabase.auth.getUser();
+      if (error || !authData.user) throw new Error('Sessão inválida');
+      await loadEmmaBackendState();
+      const user = DB.get('users', []).find(u => u.id === authData.user.id);
       if (user) {
-        if (user.bannedUntil && Date.now() < user.bannedUntil) {
-          const days = Math.ceil((user.bannedUntil - Date.now()) / 86400000);
-          DB.set('current_user', null);
-          DB.set('access_verified', false);
-          showScreen('screen-gate');
-          initGate();
-          setTimeout(() => showBanModal(user.banReason || 'Violação dos termos', days), 500);
-          return;
-        }
         state.currentUser = user;
+        DB.set('current_user', user.id);
+        subscribeEmmaRealtime();
         await startApp();
         return;
       }
+      await emmaSupabase.auth.signOut();
     }
-    // Sem sessão: sempre exigir o código de acesso antes de mostrar Entrar/Cadastrar.
+    DB.set('current_user', null);
     DB.set('access_verified', false);
     el('gate-code').value = '';
     showScreen('screen-gate');
     initGate();
   } catch(e) {
     console.error('Boot error:', e);
-    // Fallback: show gate
+    toast('Não foi possível conectar à conta. Tente entrar novamente.', 'error');
     showScreen('screen-gate');
     initGate();
   }
