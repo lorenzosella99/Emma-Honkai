@@ -1943,10 +1943,10 @@ function renderAdminPanel() {
       </div>
       <div class="admin-row">
         <div class="admin-row-info">
-          <div class="admin-row-name">🔑 Código de Acesso</div>
-          <div class="admin-row-sub">Código para novos usuários se cadastrarem</div>
+          <div class="admin-row-name">🔑 Código de convite para jogadores</div>
+          <div class="admin-row-sub">Apenas libera cadastro de contas comuns; mínimo de 32 caracteres</div>
         </div>
-        <input type="text" class="input" style="width:120px" id="access-code-cfg" value="" placeholder="Defina um novo código de convite">
+        <input type="text" class="input" style="width:180px" id="player-invite-code-cfg" value="" placeholder="Novo código de jogador">
       </div>
       <div class="admin-row" style="justify-content:flex-end">
         <button class="btn btn-primary btn-sm" onclick="saveConfig()">Salvar</button>
@@ -2081,7 +2081,7 @@ async function saveConfig() {
     thoughtCost: Math.max(0, Math.min(100000, Number(el('cost-thought-cfg').value) || 0)),
     actionCost: Math.max(0, Math.min(100000, Number(el('cost-action-cfg').value) || 0)),
     speechCost: Math.max(0, Math.min(100000, Number(el('cost-speech-cfg').value) || 0)),
-    accessCode: String(el('access-code-cfg')?.value || '').trim().toUpperCase()
+    playerInviteCode: String(el('player-invite-code-cfg')?.value || '').trim().toUpperCase()
   };
   try {
     const result = await emmaApi('admin_save_public_config', next);
