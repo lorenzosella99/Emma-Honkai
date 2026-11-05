@@ -1852,7 +1852,39 @@ function adminViewAllChats() {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const users = DB.get('users', []); const chats = DB.get('chats', []); const container = el('admin-content');
   container.innerHTML = '<div class="admin-section"><button class="btn btn-secondary btn-sm" onclick="renderAdminPanel()">← Voltar ao painel</button><div class="admin-section-header">💬 Chats de todos os usuários</div>' +
-    (users.length ? users.map(u => { const count = chats.filter(c => c.userId === u.id).length; return '<div class="admin-row"><div class="admin-row-info"><div class="admin-row-name">' + escapeHtml(u.username) + '</div><div class="admin-row-sub">' + count + ' conversa(s)</div></div><button class="btn btn-sm btn-secondary" onclick="adminViewUserChats(\'' + u.id + '\')">Abrir conversas</button></div>'; }).join('') : '<div class="admin-row-sub">Nenhum usuário cadastrado.</div>') + '</div>';
+    (users.length ? users.map(u => { const count = chats.filter(c => c.userId === u.id).length; return '<div class="admin-row"><div class="admin-row-info"><div class="admin-row-name">' + escapeHtml(u.username) + '</div><div class="admin-row-sub">' + count + ' conversa(s)</div></div><button class="btn btn-sm btn-secondary" onclick="adminViewUserChats(\'' + u.id + '\')">Abrir conversas</button><button class="btn btn-sm btn-danger" onclick="showAdminDeleteUserModal(\'' + u.id + '\')">Excluir</button></div>'; }).join('') : '<div class="admin-row-sub">Nenhum usuário cadastrado.</div>') + '</div>';
+}
+
+function showAdminDeleteUserModal(userId) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const user = DB.get('users', []).find(u => u.id === userId);
+  if (!user) return toast('Usuário não encontrado. Atualize a lista.', 'error');
+  if (userId === state.currentUser.id) return toast('Você não pode excluir sua própria conta.', 'error');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal-sheet"><div class="modal-handle"></div><div class="modal-title">⚠️ Excluir conta permanentemente</div><div class="modal-body">Conta: <b>' + escapeHtml(user.username) + '</b><br>Esta ação exclui a conta e os dados vinculados por regras do banco, incluindo conversas e mensagens. Não pode ser desfeita.<br><br>Digite exatamente o nome de usuário para confirmar.</div><input class="input" id="admin-delete-username" autocomplete="off" placeholder="' + escapeHtml(user.username) + '"><div class="modal-actions"><button class="btn btn-secondary flex-1" onclick="this.closest(\'.modal-overlay\').remove()">Cancelar</button><button class="btn btn-danger flex-1" onclick="confirmAdminDeleteUser(\'' + user.id + '\', this)">Excluir definitivamente</button></div></div>';
+  document.body.appendChild(overlay);
+}
+
+async function confirmAdminDeleteUser(userId, button) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const user = DB.get('users', []).find(u => u.id === userId);
+  const typed = el('admin-delete-username')?.value?.trim().toLowerCase();
+  if (!user || typed !== String(user.username || '').trim().toLowerCase()) return toast('O nome digitado não corresponde à conta.', 'error');
+  if (userId === state.currentUser.id) return toast('Você não pode excluir sua própria conta.', 'error');
+  button.disabled = true;
+  button.textContent = 'Excluindo…';
+  try {
+    await emmaApi('admin_delete_user', {userId, expectedUsername:user.username, expectedUserId:user.id});
+    button.closest('.modal-overlay')?.remove();
+    await loadEmmaBackendState();
+    toast('Conta e dados vinculados excluídos.', 'success');
+    adminViewAllChats();
+  } catch (e) {
+    button.disabled = false;
+    button.textContent = 'Excluir definitivamente';
+    toast(e.message || 'Não foi possível excluir a conta.', 'error');
+  }
 }
 function renderAdminPanel() {
   const container = el('admin-content');
