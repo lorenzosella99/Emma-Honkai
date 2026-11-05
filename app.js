@@ -823,6 +823,7 @@ function buyThoughtSubscription(period) {
   const users = DB.get('users', []);
   const user = users.find(u => u.id === state.currentUser.id);
   if (!user) return toast('Usuário não encontrado.', 'error');
+  if (user.subscriptionRenewalBanned) return toast('Este usuário não pode renovar assinaturas. Contate um administrador.', 'error');
   const p = cfg().thoughtPlans || { monthly: 500, yearly: 4500, promoEnabled: false, promoMonthly: 350, promoYearly: 3000 };
   const price = Number(p.promoEnabled ? (period === 'monthly' ? p.promoMonthly : p.promoYearly) : (period === 'monthly' ? p.monthly : p.yearly));
   if (!Number.isFinite(price) || price < 0) return toast('Preço inválido.', 'error');
@@ -1614,6 +1615,52 @@ function showAdminPanel() {
   renderAdminPanel();
 }
 
+function adminAddCoins(userId) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const raw = prompt('Quantas moedas Emma deseja adicionar?');
+  if (raw === null) return;
+  const amount = Math.floor(Number(raw));
+  if (!Number.isSafeInteger(amount) || amount <= 0) return toast('Informe um número inteiro maior que zero.', 'error');
+  const users = DB.get('users', []); const user = users.find(u => u.id === userId);
+  if (!user) return toast('Usuário não encontrado.', 'error');
+  user.coins = (Number(user.coins) || 0) + amount;
+  user.coinHistory = user.coinHistory || []; user.coinHistory.push({ type: 'admin_credit', amount, adminId: state.currentUser.id, timestamp: Date.now() });
+  DB.set('users', users); if (state.currentUser.id === userId) state.currentUser = user;
+  toast(amount.toLocaleString('pt-BR') + ' moedas adicionadas a ' + user.username + '.', 'success'); renderAdminPanel();
+}
+
+function adminSetSubscriptionBan(userId, banned) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const users = DB.get('users', []); const user = users.find(u => u.id === userId);
+  if (!user) return toast('Usuário não encontrado.', 'error');
+  user.subscriptionRenewalBanned = !!banned; user.subscriptionRenewalBanAt = banned ? Date.now() : null; user.subscriptionRenewalBanBy = banned ? state.currentUser.id : null;
+  DB.set('users', users); if (state.currentUser.id === userId) state.currentUser = user;
+  toast(banned ? 'Renovação bloqueada.' : 'Renovação liberada.', 'success'); renderAdminPanel();
+}
+
+function adminViewUserChats(userId) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const user = DB.get('users', []).find(u => u.id === userId); if (!user) return toast('Usuário não encontrado.', 'error');
+  const chats = DB.get('chats', []).filter(c => c.userId === userId); const messages = DB.get('messages', {}); const chars = DB.get('characters', []);
+  const container = el('admin-content');
+  container.innerHTML = '<div class="admin-section"><button class="btn btn-secondary btn-sm" onclick="adminViewAllChats()">← Voltar</button><div class="admin-section-header">Conversas de ' + escapeHtml(user.username) + '</div>' +
+    (chats.length ? chats.map(chat => {
+      const character = chars.find(c => c.id === chat.charId); const list = messages[chat.id] || [];
+      return '<div class="admin-section" style="padding:12px"><div class="admin-section-header">' + escapeHtml(character?.name || 'Personagem removido') + ' · ' + list.length + ' mensagens</div>' +
+        (list.length ? list.map(m => {
+          const sender = m.senderId === userId ? user.username : (chars.find(c => c.id === m.senderId)?.name || 'Sistema');
+          const kind = m.type === 'thought' ? '🧠 Pensamento' : (m.type === 'action' ? '✦ Ação' : '🗣️ Fala');
+          return '<div style="padding:9px;margin:6px 0;border-radius:10px;background:rgba(255,255,255,.045)"><div style="font-size:.72rem;color:var(--text-3)">' + escapeHtml(sender) + ' · ' + kind + ' · ' + new Date(m.timestamp || Date.now()).toLocaleString('pt-BR') + '</div><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px">' + escapeHtml(String(m.text || '')) + '</div></div>';
+        }).join('') : '<div class="admin-row-sub">Nenhuma mensagem nesta conversa.</div>') + '</div>';
+    }).join('') : '<div class="admin-row-sub">Este usuário ainda não possui conversas.</div>') + '</div>';
+}
+
+function adminViewAllChats() {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const users = DB.get('users', []); const chats = DB.get('chats', []); const container = el('admin-content');
+  container.innerHTML = '<div class="admin-section"><button class="btn btn-secondary btn-sm" onclick="renderAdminPanel()">← Voltar ao painel</button><div class="admin-section-header">💬 Chats de todos os usuários</div>' +
+    (users.length ? users.map(u => { const count = chats.filter(c => c.userId === u.id).length; return '<div class="admin-row"><div class="admin-row-info"><div class="admin-row-name">' + escapeHtml(u.username) + '</div><div class="admin-row-sub">' + count + ' conversa(s)</div></div><button class="btn btn-sm btn-secondary" onclick="adminViewUserChats(\'' + u.id + '\')">Abrir conversas</button></div>'; }).join('') : '<div class="admin-row-sub">Nenhum usuário cadastrado.</div>') + '</div>';
+}
 function renderAdminPanel() {
   const container = el('admin-content');
   const chars = DB.get('characters', []);
@@ -1705,6 +1752,7 @@ function renderAdminPanel() {
     <!-- USERS -->
     <div class="admin-section">
       <div class="admin-section-header">👥 Usuários (${users.length})</div>
+      <button class="btn btn-primary btn-sm" onclick="adminViewAllChats()">💬 Ver chats de todos os usuários</button>
       ${users.map(u => `
         <div class="admin-row">
           <div class="admin-row-info">
@@ -1713,6 +1761,12 @@ function renderAdminPanel() {
           </div>
           <div class="admin-actions">
             <button class="btn btn-xs btn-secondary" onclick="adminResetPassword('${u.id}')" title="Redefinir senha">🔑</button>
+            <button class="btn btn-xs btn-secondary" onclick="adminAddCoins('${u.id}')" title="Adicionar moedas">🪙+</button>
+            ${u.subscriptionRenewalBanned
+              ? `<button class="btn btn-xs btn-secondary" onclick="adminSetSubscriptionBan('${u.id}', false)">Liberar renovação</button>`
+              : `<button class="btn btn-xs btn-danger" onclick="adminSetSubscriptionBan('${u.id}', true)">Bloquear renovação</button>`
+            }
+            <button class="btn btn-xs btn-secondary" onclick="adminViewUserChats('${u.id}')">Ver chats</button>
             ${u.bannedUntil && Date.now() < u.bannedUntil
               ? `<button class="btn btn-xs btn-secondary" onclick="unbanUser('${u.id}')">Desbanir</button>`
               : u.id !== state.currentUser.id
