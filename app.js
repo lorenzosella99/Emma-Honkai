@@ -129,6 +129,7 @@ async function emmaAuthRequest(action, payload) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Falha na autenticação.');
+  if (!data.session) throw new Error(data.error || 'Conta criada, mas não foi possível iniciar a sessão. Tente entrar novamente.');
   if (data.session) {
     const { error } = await emmaSupabase.auth.setSession({
       access_token: data.session.access_token,
