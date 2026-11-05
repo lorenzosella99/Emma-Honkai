@@ -614,18 +614,18 @@ let authMode = 'login';
 
 function evaluatePasswordStrength(password, username = '') {
   const p = String(password || ''), lower = p.toLowerCase();
-  const common = ['123456','12345678','password','senha123','qwerty','admin123','111111','abc123'];
+  const common = ['123456','12345678','password','senha123','qwerty','admin123','111111','abc123','letmein','welcome'];
   if (!p) return { score: 0, label: 'Digite uma senha', advice: 'Use uma combinação longa e exclusiva.' };
-  let score = 0;
-  if (p.length >= 12) score++;
-  if (p.length >= 16) score++;
+  let score = p.length >= 24 ? 5 : p.length >= 20 ? 4 : p.length >= 16 ? 3 : p.length >= 12 ? 2 : 0;
   if (/[a-z]/.test(p) && /[A-Z]/.test(p)) score++;
   if (/\d/.test(p)) score++;
   if (/[^A-Za-z0-9]/.test(p)) score++;
-  if (common.some(x => lower.includes(x)) || (username && lower.includes(username.toLowerCase()))) score = Math.min(score, 1);
+  const looksCommon = common.some(x => lower.includes(x)) || (username && lower.includes(username.toLowerCase())) || /(.)\1{3,}/.test(p);
+  if (looksCommon) score = 0;
+  score = Math.min(score, 5);
   const labels = ['Muito fraca', 'Fraca', 'Razoável', 'Boa', 'Forte', 'Muito forte'];
-  const advice = p.length < 12 ? 'Use pelo menos 12 caracteres.' : score < 3 ? 'Misture maiúsculas, minúsculas, números e símbolos.' : score < 5 ? 'Adicione mais variedade ou aumente o comprimento.' : 'Boa escolha! Evite reutilizar esta senha em outros sites.';
-  return { score, label: labels[Math.min(score, 5)], advice };
+  const advice = p.length < 12 ? 'Use pelo menos 12 caracteres.' : looksCommon ? 'Evite sequências repetidas, palavras comuns e seu nome de usuário.' : score < 3 ? 'Aumente o comprimento ou combine mais tipos de caracteres.' : score < 5 ? 'Uma frase-senha longa e exclusiva também é uma boa opção.' : 'Boa escolha! Não reutilize esta senha em outros sites.';
+  return { score, label: labels[score], advice };
 }
 function renderAuthScreen() {
   const isRecovery = authMode === 'recovery';
