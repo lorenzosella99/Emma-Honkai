@@ -640,9 +640,7 @@ function renderAuthScreen() {
     recoveryLink.style.cssText = 'text-align:center;margin-top:-8px';
     el('auth-submit').insertAdjacentElement('afterend', recoveryLink);
   }
-  recoveryLink.innerHTML = authMode === 'login'
-    ? `<button class="btn-link" onclick="authMode='recovery';renderAuthScreen()">Esqueci minha senha</button>`
-    : `<button class="btn-link" onclick="authMode='login';renderAuthScreen()">← Voltar para login</button>`;
+  recoveryLink.textContent = 'Para recuperar a senha, solicite ao administrador.';
 
   // Show/hide username & password fields depending on mode
   el('auth-username').parentElement.style.display = '';
@@ -1265,15 +1263,6 @@ async function sendMessage() {
     return toast(`Sem moedas! Você precisa de ${cost}🪙 para enviar um ${type}.`, 'error');
   }
 
-  // Deduct coins
-  if (cost > 0) {
-    user.coins -= cost;
-    DB.set('users', users);
-    state.currentUser = user;
-    updateCoinsDisplay();
-    toast(`-${cost}🪙`, 'info', 1500);
-  }
-
   input.value = '';
   input.style.height = 'auto';
 
@@ -1287,9 +1276,15 @@ async function sendMessage() {
     timestamp: Date.now(),
     cost
   };
-  try { await addMessage(userMsg); }
+  try {
+    await addMessage(userMsg);
+    if (userMsg.remoteResult?.coins !== undefined) {
+      user.coins = Number(userMsg.remoteResult.coins);
+      state.currentUser = user; DB.set('users', users); updateCoinsDisplay();
+      if (cost > 0) toast(`-${cost}🪙`, 'info', 1500);
+    }
+  }
   catch (e) {
-    if (cost > 0) { user.coins += cost; DB.set('users', users); state.currentUser = user; updateCoinsDisplay(); }
     input.value = text;
     toast('A mensagem não foi salva. Tente novamente: ' + e.message, 'error');
     return;
@@ -1472,9 +1467,9 @@ async function addMessage(msg) {
   // A gravação remota ocorre depois da renderização, sem bloquear a interface.
   try {
     if (msg.isBot) {
-      await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
+      msg.remoteResult = await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
     } else if (msg.senderId === state.currentUser.id) {
-      await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
+      msg.remoteResult = await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
     } else {
       throw new Error('Remetente inválido para esta conversa.');
     }
@@ -1915,7 +1910,7 @@ function renderAdminPanel() {
           <div class="admin-row-name">🔑 Código de Acesso</div>
           <div class="admin-row-sub">Código para novos usuários se cadastrarem</div>
         </div>
-        <input type="text" class="input" style="width:120px" id="access-code-cfg" value="${config.accessCode}">
+        <input type="text" class="input" style="width:120px" id="access-code-cfg" value="" placeholder="Defina um novo código de convite">
       </div>
       <div class="admin-row" style="justify-content:flex-end">
         <button class="btn btn-primary btn-sm" onclick="saveConfig()">Salvar</button>
