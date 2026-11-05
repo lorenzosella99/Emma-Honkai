@@ -148,6 +148,17 @@ async function emmaApi(action, payload = {}) {
   return data;
 }
 
+async function syncMyProfileFromAppUser(user) {
+  if (!user || user.id !== state.currentUser?.id) return;
+  return emmaApi('sync_my_profile', {
+    coins:user.coins, totalMessages:user.totalMessages, thoughtsBought:user.thoughtsBought,
+    uniqueCharsContacted:user.uniqueCharsContacted || [], missionProgress:user.missionProgress || {},
+    completedMissions:user.completedMissions || [], gender:user.gender || 'other',
+    chatPreference:user.chatPreference || 'both', avatar:user.avatar || null,
+    allowBotTakeover:!!user.allowBotTakeover
+  });
+}
+
 function profileToAppUser(p) {
   return {
     id: p.id, username: p.username, isAdmin: p.role === 'admin',
@@ -158,8 +169,12 @@ function profileToAppUser(p) {
     characterRequest: { status: p.character_request_status || 'none', requestedAt: p.character_request_at ? Date.parse(p.character_request_at) : null },
     joinDate: p.created_at ? Date.parse(p.created_at) : Date.now(),
     lastSeenAt: p.last_seen_at ? Date.parse(p.last_seen_at) : 0,
-    coins: Number(p.coins ?? cfg().startingCoins), totalMessages: 0,
-    thoughtsBought: 0, uniqueCharsContacted: [], missionProgress: {}, completedMissions: []
+    coins: Number(p.coins ?? cfg().startingCoins), totalMessages: Number(p.total_messages || 0),
+    thoughtsBought: Number(p.thoughts_bought || 0), uniqueCharsContacted: Array.isArray(p.unique_chars_contacted) ? p.unique_chars_contacted : [],
+    missionProgress: p.mission_progress || {}, completedMissions: Array.isArray(p.completed_missions) ? p.completed_missions : [],
+    thoughtSubscription: p.thought_subscription || null, subscriptionRenewalBanned: !!p.subscription_renewal_banned,
+    bannedUntil: p.banned_until ? Date.parse(p.banned_until) : null, banReason: p.ban_reason || '',
+    coinHistory: Array.isArray(p.coin_history) ? p.coin_history : []
   };
 }
 
@@ -173,17 +188,11 @@ async function loadEmmaBackendState() {
     emmaSupabase.from('character_applications').select('*')
   ]);
   for (const x of [pr,cr,hr,mr,rr,ar]) if (x.error) throw x.error;
-  const localUsers = DB.get('users', []);
-  const users = (pr.data || []).map(p => {
-    const fresh = profileToAppUser(p), cached = localUsers.find(u => u.id === p.id);
-    return cached ? { ...fresh, coins: cached.coins ?? fresh.coins, totalMessages: cached.totalMessages || 0,
-      thoughtsBought: cached.thoughtsBought || 0, uniqueCharsContacted: cached.uniqueCharsContacted || [],
-      missionProgress: cached.missionProgress || {}, completedMissions: cached.completedMissions || [],
-      thoughtSubscription: cached.thoughtSubscription || null } : fresh;
-  });
+  const users = (pr.data || []).map(profileToAppUser);
   const characters = (cr.data || []).map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', isBanned:!!c.is_banned,
+    banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:c.owner_user_id ? !!(users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000) : !!c.is_online
   }));
   const chats = (hr.data || []).map(c => ({
@@ -211,6 +220,12 @@ async function loadEmmaBackendState() {
   DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
+  if (state.currentUser?.bannedUntil && Date.now() < state.currentUser.bannedUntil) {
+    await emmaSupabase.auth.signOut();
+    localStorage.removeItem('emma_current_user');
+    state.currentUser = null;
+    throw new Error('Sua conta está suspensa até ' + new Date(me.bannedUntil).toLocaleString('pt-BR') + '. Motivo: ' + (me.banReason || 'não informado'));
+  }
   return { users, characters, chats, messages, reports, applications };
 }
 
@@ -837,17 +852,11 @@ function adminResetPassword(userId) {
   document.body.appendChild(overlay);
 }
 
-function confirmAdminReset(userId, btn) {
+async function confirmAdminReset(userId, btn) {
   const newPass = el('admin-new-pass').value.trim();
-  if (!newPass || newPass.length < 4) return toast('Senha muito curta.', 'error');
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === userId);
-  if (!user) return;
-  user.password = newPass;
-  DB.set('users', users);
-  btn.closest('.modal-overlay').remove();
-  toast(`Senha de "${user.username}" redefinida!`, 'success');
-  renderAdminPanel();
+  if (!newPass || newPass.length < 6 || newPass.length > 72) return toast('A senha precisa ter entre 6 e 72 caracteres.', 'error');
+  try { await emmaApi('admin_reset_password', {userId, password:newPass}); btn.closest('.modal-overlay').remove(); toast('Senha redefinida no Supabase Auth.', 'success'); }
+  catch(e) { toast(e.message, 'error'); }
 }
 
 function showBanModal(reason, days) {
@@ -949,6 +958,7 @@ function buyThoughtSubscription(period) {
   user.thoughtSubscriptionHistory = user.thoughtSubscriptionHistory || [];
   user.thoughtSubscriptionHistory.push({ plan: period, price: price, purchasedAt: now, expiresAt: user.thoughtSubscription.expiresAt });
   DB.set('users', users); state.currentUser = user; updateCoinsDisplay();
+  syncMyProfileFromAppUser(user).catch(e => toast('Sincronização da assinatura pendente.', 'error'));
   toast('Assinatura ativada!', 'success'); switchTab('store');
 }
 
@@ -1052,7 +1062,7 @@ function renderCharsTab(container) {
 function setCharPref(pref) {
   const users = DB.get('users', []);
   const user = users.find(u => u.id === state.currentUser.id);
-  if (user) { user.chatPreference = pref; DB.set('users', users); state.currentUser = user; }
+  if (user) { user.chatPreference = pref; DB.set('users', users); state.currentUser = user; syncMyProfileFromAppUser(user).catch(console.warn); }
   switchTab('chars');
 }
 
@@ -1341,7 +1351,13 @@ async function sendMessage() {
     timestamp: Date.now(),
     cost
   };
-  addMessage(userMsg);
+  try { await addMessage(userMsg); }
+  catch (e) {
+    if (cost > 0) { user.coins += cost; DB.set('users', users); state.currentUser = user; updateCoinsDisplay(); }
+    input.value = text;
+    toast('A mensagem não foi salva. Tente novamente: ' + e.message, 'error');
+    return;
+  }
 
   // Update stats
   user.totalMessages = (user.totalMessages || 0) + 1;
@@ -1352,6 +1368,7 @@ async function sendMessage() {
   if (type === 'thought') user.thoughtsBought = (user.thoughtsBought || 0) + 1;
   DB.set('users', users);
   state.currentUser = user;
+  syncMyProfileFromAppUser(user).catch(e => console.warn('Perfil não sincronizado:', e.message));
 
   // Update missions
   updateMissionProgress('chat_count', user.totalMessages);
@@ -1433,7 +1450,8 @@ async function botRespond() {
       // Check if user wants to unlock the thought
       await promptThoughtUnlock(botMsg, char, cost, container);
     } else {
-      addMessage(botMsg);
+      try { await addMessage(botMsg); }
+      catch (e) { console.warn('Bot message sync:', e); toast('A resposta não foi salva no servidor.', 'error'); break; }
       if (i < responses.length - 1) await sleep(600 + Math.random() * 400);
     }
   }
@@ -1468,7 +1486,7 @@ async function promptThoughtUnlock(msg, char, cost, container) {
   });
 }
 
-function unlockThought(btn, msgId) {
+async function unlockThought(btn, msgId) {
   const config = cfg();
   const cost = config.thoughtCost;
   const users = DB.get('users', []);
@@ -1488,43 +1506,37 @@ function unlockThought(btn, msgId) {
   const msg = JSON.parse(lockEl.dataset.lockedMsg);
   lockEl.remove();
 
-  addMessage({ ...msg, cost });
+  try { await addMessage({ ...msg, cost }); }
+  catch (e) { user.coins += cost; DB.set('users', users); state.currentUser = user; updateCoinsDisplay(); toast('Não foi possível salvar o pensamento. Moedas devolvidas.', 'error'); return; }
+  syncMyProfileFromAppUser(user).catch(e => console.warn(e));
   toast(`-${cost}🪙 — Pensamento desbloqueado!`, 'gold');
   updateMissionProgress('thoughts_bought', user.thoughtsBought);
 }
 
-function addMessage(msg) {
+async function addMessage(msg) {
+  if (msg.isBot) {
+    await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
+  } else if (msg.senderId === state.currentUser.id) {
+    await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
+  } else {
+    throw new Error('Remetente inválido para esta conversa.');
+  }
   const messages = DB.get('messages', {});
   if (!messages[msg.chatId]) messages[msg.chatId] = [];
-  messages[msg.chatId].push(msg);
+  if (!messages[msg.chatId].some(m => m.id === msg.id)) messages[msg.chatId].push(msg);
   DB.set('messages', messages);
   const chats = DB.get('chats', []);
   const chat = chats.find(c => c.id === msg.chatId);
   if (chat) {
     chat.lastMessage = msg.text.substring(0, 60); chat.lastTime = msg.timestamp;
-    if (msg.isBot || msg.senderId !== chat.userId) chat.unread = (chat.unread || 0) + 1;
+    if (msg.isBot) chat.unread = (chat.unread || 0) + 1;
     DB.set('chats', chats);
   }
-  // Persist through RLS-protected tables; bot replies are validated server-side.
-  (async () => {
-    try {
-      if (msg.isBot) {
-        await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
-      } else if (msg.senderId === state.currentUser.id) {
-        const { error } = await emmaSupabase.from('messages').insert({
-          id: msg.id, chat_id: msg.chatId, sender_user_id: state.currentUser.id,
-          message_type: msg.type || 'speech', body: msg.text, is_bot: false,
-          created_at: new Date(msg.timestamp).toISOString()
-        });
-        if (error) throw error;
-        await emmaSupabase.from('chats').update({ last_message: msg.text.slice(0,60), last_time: new Date(msg.timestamp).toISOString(), unread: 1 }).eq('id', msg.chatId);
-      }
-    } catch(e) { console.error('Message sync failed:', e); toast('Mensagem não sincronizada: ' + e.message, 'error'); }
-  })();
   const container = el('chat-messages');
   const msgEl = document.createElement('div'); msgEl.innerHTML = renderMessage(msg);
   if (msgEl.firstElementChild) container.appendChild(msgEl.firstElementChild);
   container.scrollTop = container.scrollHeight;
+  return msg;
 }
 
 // ─── MSG TYPE SELECTOR ────────────────────────────────────────────────────────
@@ -1801,7 +1813,7 @@ function renderMissionCard(mission, user, done = false) {
   `;
 }
 
-function claimMission(missionId, event) {
+async function claimMission(missionId, event) {
   const missions = DB.get('missions', []);
   const mission = missions.find(m => m.id === missionId);
   if (!mission) return;
@@ -1815,6 +1827,7 @@ function claimMission(missionId, event) {
   user.completedMissions.push(missionId);
   DB.set('users', users);
   state.currentUser = user;
+  try { await syncMyProfileFromAppUser(user); } catch(e) { toast('Recompensa local; sincronização pendente.', 'error'); }
 
   // Coin animation
   const rect = event.target.getBoundingClientRect();
@@ -1844,6 +1857,7 @@ function updateMissionProgress(type, value) {
 
   DB.set('users', users);
   state.currentUser = user;
+  syncMyProfileFromAppUser(user).catch(e => console.warn('Progresso não sincronizado:', e.message));
   updateNavBadges();
 }
 
@@ -1853,7 +1867,7 @@ function showAdminPanel() {
   renderAdminPanel();
 }
 
-function adminAddCoins(userId) {
+async function adminAddCoins(userId) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const raw = prompt('Quantas moedas Emma deseja adicionar?');
   if (raw === null) return;
@@ -1863,17 +1877,23 @@ function adminAddCoins(userId) {
   if (!user) return toast('Usuário não encontrado.', 'error');
   user.coins = (Number(user.coins) || 0) + amount;
   user.coinHistory = user.coinHistory || []; user.coinHistory.push({ type: 'admin_credit', amount, adminId: state.currentUser.id, timestamp: Date.now() });
-  DB.set('users', users); if (state.currentUser.id === userId) state.currentUser = user;
-  toast(amount.toLocaleString('pt-BR') + ' moedas adicionadas a ' + user.username + '.', 'success'); renderAdminPanel();
+  try {
+    await emmaApi('admin_update_user', {userId, coins:user.coins, coinHistory:user.coinHistory});
+    DB.set('users', users); if (state.currentUser.id === userId) state.currentUser = user;
+    await loadEmmaBackendState(); toast(amount.toLocaleString('pt-BR') + ' moedas adicionadas a ' + user.username + '.', 'success'); renderAdminPanel();
+  } catch(e) { user.coins -= amount; user.coinHistory.pop(); toast(e.message, 'error'); }
 }
 
-function adminSetSubscriptionBan(userId, banned) {
+async function adminSetSubscriptionBan(userId, banned) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const users = DB.get('users', []); const user = users.find(u => u.id === userId);
   if (!user) return toast('Usuário não encontrado.', 'error');
   user.subscriptionRenewalBanned = !!banned; user.subscriptionRenewalBanAt = banned ? Date.now() : null; user.subscriptionRenewalBanBy = banned ? state.currentUser.id : null;
-  DB.set('users', users); if (state.currentUser.id === userId) state.currentUser = user;
-  toast(banned ? 'Renovação bloqueada.' : 'Renovação liberada.', 'success'); renderAdminPanel();
+  try {
+    await emmaApi('admin_update_user', {userId, subscriptionRenewalBanned:!!banned});
+    DB.set('users', users); if (state.currentUser.id === userId) state.currentUser = user;
+    await loadEmmaBackendState(); toast(banned ? 'Renovação bloqueada.' : 'Renovação liberada.', 'success'); renderAdminPanel();
+  } catch(e) { user.subscriptionRenewalBanned = !banned; toast(e.message, 'error'); }
 }
 
 function adminViewUserChats(userId) {
@@ -2132,10 +2152,13 @@ function saveConfig() {
   toast('Configurações salvas!', 'success');
 }
 
-function toggleCharOnline(charId, isOnline) {
+async function toggleCharOnline(charId, isOnline) {
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
-  if (char) { char.isOnline = isOnline; DB.set('characters', chars); }
+  if (!char) return;
+  const old = char.isOnline; char.isOnline = isOnline;
+  try { await emmaApi('admin_save_character', {character:char}); DB.set('characters', chars); toast('Status atualizado.', 'success'); }
+  catch(e) { char.isOnline = old; toast(e.message, 'error'); }
 }
 
 function showBanCharModal(charId) {
@@ -2162,30 +2185,25 @@ function showBanCharModal(charId) {
   document.body.appendChild(overlay);
 }
 
-function banChar(charId, btn) {
+async function banChar(charId, btn) {
   const overlay = btn.closest('.modal-overlay');
   const reason = el('ban-char-reason').value.trim() || 'Sem motivo';
   const days = parseInt(el('ban-char-days').value) || 3;
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
-  if (char) {
-    char.isBanned = true;
-    char.banReason = reason;
-    char.banUntil = Date.now() + days * 86400000;
-    char.isOnline = false;
-    DB.set('characters', chars);
-  }
-  overlay.remove();
-  toast(`${char.name} banido por ${days} dias.`, 'error');
-  renderAdminPanel();
+  if (!char) return;
+  const old = {...char}; char.isBanned = true; char.banReason = reason; char.banUntil = Date.now() + days * 86400000; char.isOnline = false;
+  try { await emmaApi('admin_save_character', {character:char}); DB.set('characters', chars); overlay.remove(); toast(`${char.name} banido por ${days} dias.`, 'error'); renderAdminPanel(); }
+  catch(e) { Object.assign(char,old); toast(e.message, 'error'); }
 }
 
-function unbanChar(charId) {
+async function unbanChar(charId) {
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
-  if (char) { char.isBanned = false; char.banUntil = null; char.banReason = ''; DB.set('characters', chars); }
-  toast('Personagem desbanido!', 'success');
-  renderAdminPanel();
+  if (!char) return;
+  const old = {...char}; char.isBanned = false; char.banUntil = null; char.banReason = '';
+  try { await emmaApi('admin_save_character', {character:char}); DB.set('characters', chars); toast('Personagem desbanido!', 'success'); renderAdminPanel(); }
+  catch(e) { Object.assign(char,old); toast(e.message, 'error'); }
 }
 
 function showBanUserModal(userId) {
@@ -2212,28 +2230,18 @@ function showBanUserModal(userId) {
   document.body.appendChild(overlay);
 }
 
-function banUser(userId, btn) {
+async function banUser(userId, btn) {
   const overlay = btn.closest('.modal-overlay');
   const reason = el('ban-user-reason').value.trim() || 'Sem motivo';
   const days = parseInt(el('ban-user-days').value) || 3;
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === userId);
-  if (user) {
-    user.bannedUntil = Date.now() + days * 86400000;
-    user.banReason = reason;
-    DB.set('users', users);
-  }
-  overlay.remove();
-  toast(`Usuário banido por ${days} dias.`, 'error');
-  renderAdminPanel();
+  const until = Date.now() + days * 86400000;
+  try { await emmaApi('admin_set_user_ban', {userId, bannedUntil:until, reason}); await loadEmmaBackendState(); overlay.remove(); toast(`Usuário banido por ${days} dias.`, 'error'); renderAdminPanel(); }
+  catch(e) { toast(e.message, 'error'); }
 }
 
-function unbanUser(userId) {
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === userId);
-  if (user) { user.bannedUntil = null; user.banReason = ''; DB.set('users', users); }
-  toast('Usuário desbanido!', 'success');
-  renderAdminPanel();
+async function unbanUser(userId) {
+  try { await emmaApi('admin_set_user_ban', {userId, bannedUntil:null, reason:''}); await loadEmmaBackendState(); toast('Usuário desbanido!', 'success'); renderAdminPanel(); }
+  catch(e) { toast(e.message, 'error'); }
 }
 
 function deleteMission(missionId) {
@@ -2315,7 +2323,7 @@ function syncCharImgUrl(input) {
 
 function showEditCharModal(charId) { showAddCharModal(charId); }
 
-function saveChar(editId, btn) {
+async function saveChar(editId, btn) {
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
   if (!name) return toast('Nome obrigatório.', 'error');
@@ -2349,10 +2357,12 @@ function saveChar(editId, btn) {
       banReason: ''
     });
   }
-  DB.set('characters', chars);
-  overlay.remove();
-  toast('Personagem salvo!', 'success');
-  renderAdminPanel();
+  const saved = chars.find(c => c.id === (editId || chars[chars.length-1].id));
+  try {
+    await emmaApi('admin_save_character', {character:saved});
+    DB.set('characters', chars); overlay.remove(); toast('Personagem salvo no servidor!', 'success');
+    await loadEmmaBackendState(); renderAdminPanel();
+  } catch(e) { toast('Não foi possível salvar o personagem: ' + e.message, 'error'); }
 }
 
 function showAddMissionModal() {
@@ -2427,6 +2437,7 @@ function handleAvatarUpload(input) {
       user.avatar = base64;
       DB.set('users', users);
       state.currentUser = user;
+      syncMyProfileFromAppUser(user).catch(console.warn);
       const img = el('profile-avatar-img');
       if (img) img.src = base64;
       toast('Foto atualizada!', 'success');
@@ -2487,6 +2498,7 @@ function savePreferences(btn) {
     user.chatPreference = getChipVal('pref-chatpref', 'both');
     DB.set('users', users);
     state.currentUser = user;
+    syncMyProfileFromAppUser(user).catch(console.warn);
   }
   overlay.remove();
   toast('Preferências salvas!', 'success');
