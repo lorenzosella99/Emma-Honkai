@@ -715,8 +715,7 @@ function renderAuthScreen() {
     el('auth-fields-register').innerHTML = `
       <div class="recovery-info">
         <div style="font-size:.85rem;color:var(--text-2);line-height:1.6;margin-bottom:12px">
-          Como o app é local (sem servidor), a recuperação funciona com o <strong>código admin</strong>.
-          Um admin pode redefinir sua senha pelo painel, ou você pode redefinir aqui usando o código admin.
+          As contas agora são protegidas pelo servidor. Para redefinir sua senha, peça ao administrador para fazer isso pelo painel.
         </div>
         <div class="field">
           <label>Novo usuário (confirme)</label>
@@ -724,7 +723,7 @@ function renderAuthScreen() {
         </div>
         <div class="field">
           <label>Nova senha</label>
-          <input type="password" class="input" id="recovery-newpass" placeholder="Nova senha (mín. 4 caracteres)">
+          <input type="password" class="input" id="recovery-newpass" placeholder="Nova senha (mín. 6 caracteres)">
         </div>
         <div class="field">
           <label>Código admin para autorizar</label>
