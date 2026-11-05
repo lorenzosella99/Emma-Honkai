@@ -2,113 +2,27 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-// ─── GITHUB DB — integração com emma_honkai_dados ───────────────────────────
-const GITHUB_REPO  = 'lorenzosella99/emma_honkai_dados';
-const GITHUB_BRANCH = 'main';
-const RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/dados`;
-const API_BASE = `https://api.github.com/repos/${GITHUB_REPO}/contents/dados`;
-
-// Mapeamento: chave local → arquivo no repo
-const GH_FILES = {
-  missions:   'missions.json',
-  config:     'config.json'
-};
-
-// SHAs cacheados para evitar re-fetch (necessário para PUT no GitHub API)
-const _ghSHAs = {};
-
-function ghToken() {
-  try { return localStorage.getItem('emma_gh_token') || ''; } catch { return ''; }
-}
-
-function ghSetToken(tok) {
-  try { localStorage.setItem('emma_gh_token', tok); } catch {}
-}
-
-// Busca arquivo do GitHub. Usa a API autenticada quando há token
-// (necessário porque o repositório de dados é privado); sem token, tenta raw.
-async function ghFetch(filename) {
-  try {
-    const token = ghToken();
-    if (token) {
-      const apiRes = await fetch(`${API_BASE}/${filename}`, {
-        headers: {
-          Authorization: `token ${token}`,
-          Accept: 'application/vnd.github.v3+json'
-        }
-      });
-      if (apiRes.ok) {
-        const file = await apiRes.json();
-        if (file.sha) _ghSHAs[filename] = file.sha;
-        const decoded = decodeURIComponent(escape(atob((file.content || '').replace(/\s/g, ''))));
-        return JSON.parse(decoded);
-      }
-    }
-
-    const url = `${RAW_BASE}/${filename}?t=${Date.now()}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch { return null; }
-}
-
-// Faz push de um arquivo para o GitHub (requer token)
-async function ghPush(filename, content) {
-  const token = ghToken();
-  if (!token) return false;
-  try {
-    // Busca SHA atual do arquivo (necessário para update)
-    const infoRes = await fetch(`${API_BASE}/${filename}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
-    });
-    let sha = _ghSHAs[filename];
-    if (infoRes.ok) {
-      const info = await infoRes.json();
-      sha = info.sha;
-      _ghSHAs[filename] = sha;
-    }
-    const body = {
-      message: `update ${filename} [app]`,
-      content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
-      branch: GITHUB_BRANCH
-    };
-    if (sha) body.sha = sha;
-    const putRes = await fetch(`${API_BASE}/${filename}`, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (putRes.ok) {
-      const r = await putRes.json();
-      if (r.content) _ghSHAs[filename] = r.content.sha;
-      return true;
-    }
-    return false;
-  } catch { return false; }
-}
-
-// Sincroniza do GitHub para o localStorage (pull)
+// ─── GITHUB DATA MIRROR — acesso sempre pelo servidor ───────────────────────
+const GH_FILES = { missions: 'missions.json', config: 'config.json' };
 async function ghPull() {
   let pulled = 0;
-  for (const [key, file] of Object.entries(GH_FILES)) {
-    const data = await ghFetch(file);
-    if (data !== null) {
-      try { localStorage.setItem('emma_' + key, JSON.stringify(data)); } catch {}
-      pulled++;
-    }
+  for (const [key] of Object.entries(GH_FILES)) {
+    try {
+      const result = await emmaApi('github_sync', { direction: 'pull', key });
+      if (result?.data !== undefined && result.data !== null) {
+        localStorage.setItem('emma_' + key, JSON.stringify(result.data)); pulled++;
+      }
+    } catch (e) { console.warn('GitHub pull:', e.message); }
   }
   return pulled;
 }
-
-// Push de uma chave local para o GitHub (fire-and-forget, não bloqueia UI)
-function ghPushKey(key) {
-  const file = GH_FILES[key];
-  if (!file || !ghToken()) return;
-  try {
-    const val = localStorage.getItem('emma_' + key);
-    if (val) ghPush(file, JSON.parse(val)).catch(() => {});
-  } catch {}
+async function ghPush(filename, content) {
+  const key = Object.keys(GH_FILES).find(k => GH_FILES[k] === filename);
+  if (!key) return false;
+  try { await emmaApi('github_sync', { direction: 'push', key, value: content }); return true; }
+  catch (e) { console.warn('GitHub push:', e.message); return false; }
 }
+function ghPushKey(key) { /* escrita explícita somente por administrador autenticado */ }
 
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
 
@@ -284,7 +198,7 @@ const DB = {
   set(key, val) {
     try {
       localStorage.setItem('emma_' + key, JSON.stringify(val));
-      ghPushKey(key);
+      // Espelhamento no GitHub ocorre apenas por ação autenticada de administrador.
       // O perfil só sincroniza os campos editáveis do próprio usuário.
       if (key === 'users' && emmaSupabase) {
         const myId = localStorage.getItem('emma_current_user');
@@ -698,6 +612,21 @@ function initGate() {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 let authMode = 'login';
 
+function evaluatePasswordStrength(password, username = '') {
+  const p = String(password || ''), lower = p.toLowerCase();
+  const common = ['123456','12345678','password','senha123','qwerty','admin123','111111','abc123'];
+  if (!p) return { score: 0, label: 'Digite uma senha', advice: 'Use uma combinação longa e exclusiva.' };
+  let score = 0;
+  if (p.length >= 12) score++;
+  if (p.length >= 16) score++;
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) score++;
+  if (/\d/.test(p)) score++;
+  if (/[^A-Za-z0-9]/.test(p)) score++;
+  if (common.some(x => lower.includes(x)) || (username && lower.includes(username.toLowerCase()))) score = Math.min(score, 1);
+  const labels = ['Muito fraca', 'Fraca', 'Razoável', 'Boa', 'Forte', 'Muito forte'];
+  const advice = p.length < 12 ? 'Use pelo menos 12 caracteres.' : score < 3 ? 'Misture maiúsculas, minúsculas, números e símbolos.' : score < 5 ? 'Adicione mais variedade ou aumente o comprimento.' : 'Boa escolha! Evite reutilizar esta senha em outros sites.';
+  return { score, label: labels[Math.min(score, 5)], advice };
+}
 function renderAuthScreen() {
   const isRecovery = authMode === 'recovery';
   el('auth-title').textContent = authMode === 'login' ? 'Bem-vindo de volta' : authMode === 'register' ? 'Criar conta' : '🔑 Recuperar senha';
@@ -720,6 +649,20 @@ function renderAuthScreen() {
   // Show/hide username & password fields depending on mode
   el('auth-username').parentElement.style.display = '';
   el('auth-password').parentElement.style.display = authMode === 'recovery' ? 'none' : '';
+  let strengthMeter = document.getElementById('auth-password-strength');
+  if (!strengthMeter) {
+    strengthMeter = document.createElement('div'); strengthMeter.id = 'auth-password-strength';
+    strengthMeter.style.cssText = 'display:none;margin-top:-10px;margin-bottom:14px;font-size:.78rem;line-height:1.5';
+    el('auth-password').parentElement.insertAdjacentElement('afterend', strengthMeter);
+  }
+  const updatePasswordMeter = () => {
+    const visible = authMode === 'register'; strengthMeter.style.display = visible ? 'block' : 'none';
+    if (!visible) return;
+    const result = evaluatePasswordStrength(el('auth-password').value, el('auth-username').value);
+    const colors = ['#ef4444','#f97316','#eab308','#84cc16','#22c55e','#16a34a'];
+    strengthMeter.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><strong style="color:' + colors[result.score] + '">' + result.label + '</strong><span style="color:var(--text-muted)">' + result.score + '/5</span></div><div style="height:5px;background:rgba(255,255,255,.10);border-radius:9px;overflow:hidden;margin:5px 0"><div style="height:100%;width:' + (result.score*20) + '%;background:' + colors[result.score] + ';transition:width .15s"></div></div><span style="color:var(--text-muted)">' + result.advice + '</span>';
+  };
+  el('auth-password').oninput = updatePasswordMeter; el('auth-username').oninput = updatePasswordMeter; updatePasswordMeter();
 
   if (authMode === 'register') {
     el('auth-fields-register').classList.remove('hidden');
@@ -794,6 +737,10 @@ function initAuth() {
     const username = el('auth-username').value.trim().toLowerCase();
     const password = el('auth-password').value;
     if (!username || !password) return toast('Preencha todos os campos.', 'error');
+    if (authMode === 'register') {
+      const strength = evaluatePasswordStrength(password, username);
+      if (password.length < 12 || strength.score < 3) return toast('Sua senha está ' + strength.label.toLowerCase() + '. Use pelo menos 12 caracteres e mais variedade.', 'error', 6000);
+    }
     const submit = el('auth-submit'); submit.disabled = true;
     try {
       const data = await emmaAuthRequest(authMode === 'register' ? 'register' : 'login', {
@@ -2066,25 +2013,14 @@ function renderAdminPanel() {
 
     <!-- GITHUB SYNC -->
     <div class="admin-section">
-      <div class="admin-section-header">🔗 Sincronização GitHub</div>
-      <div class="admin-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <div class="admin-row-sub" style="line-height:1.5">
-          Os dados são lidos do repositório <code style="background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px">emma_honkai_dados</code> ao iniciar o app.
-          Para que o app também <strong>salve</strong> dados no repositório, configure um token do GitHub com permissão de escrita (<code style="background:rgba(255,255,255,.07);padding:2px 6px;border-radius:4px">Contents: write</code>).
-        </div>
-        <div style="display:flex;gap:8px;width:100%;align-items:center">
-          <input type="password" class="input" id="gh-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-            value="${ghToken() ? '•'.repeat(20) : ''}" style="flex:1" autocomplete="off">
-          <button class="btn btn-primary btn-sm" onclick="saveGhToken()">Salvar Token</button>
-          <button class="btn btn-secondary btn-sm" onclick="clearGhToken()">Remover</button>
-        </div>
-        <div id="gh-status" style="font-size:.75rem;color:var(--text-muted)">
-          ${ghToken() ? '✅ Token configurado — dados serão enviados ao GitHub ao salvar' : '⚠️ Sem token — app só lê do GitHub, não escreve'}
-        </div>
+      <div class="admin-section-header">🔗 Sincronização GitHub segura</div>
+      <div class="admin-row-sub" style="line-height:1.5">
+        A sincronização usa um segredo privado no Supabase. Nenhum token fica neste navegador.
+        Configure <code>GITHUB_TOKEN</code> em Edge Functions → Secrets no Supabase.
       </div>
-      <div class="admin-row" style="justify-content:flex-end;gap:8px;margin-top:4px">
-        <button class="btn btn-secondary btn-sm" onclick="manualGhPull()">⬇️ Puxar dados do GitHub agora</button>
-        <button class="btn btn-secondary btn-sm" onclick="manualGhPush()">⬆️ Enviar dados ao GitHub agora</button>
+      <div class="admin-row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn btn-secondary btn-sm" onclick="manualGhPull()">⬇️ Puxar dados do GitHub</button>
+        <button class="btn btn-secondary btn-sm" onclick="manualGhPush()">⬆️ Enviar dados ao GitHub</button>
       </div>
     </div>
 
@@ -2103,43 +2039,20 @@ async function adminSetUserRole(userId, role) {
   }
 }
 
-function saveGhToken() {
-  const val = el('gh-token-input').value.trim();
-  if (!val || val.startsWith('•')) return toast('Cole um token válido.', 'error');
-  ghSetToken(val);
-  toast('Token salvo!', 'success');
-  renderAdminPanel();
-}
-
-function clearGhToken() {
-  localStorage.removeItem('emma_gh_token');
-  toast('Token removido.', 'info');
-  renderAdminPanel();
-}
-
 async function manualGhPull() {
   toast('Puxando dados do GitHub...', 'info');
   const n = await ghPull();
-  if (n > 0) {
-    toast(`${n} arquivo(s) sincronizados!`, 'success');
-    renderAdminPanel();
-  } else {
-    toast('Nenhum dado recebido do GitHub.', 'error');
-  }
+  if (n > 0) { toast(`${n} arquivo(s) sincronizados!`, 'success'); renderAdminPanel(); }
+  else toast('Falha ao puxar. Confira GITHUB_TOKEN nos Secrets do Supabase.', 'error');
 }
-
 async function manualGhPush() {
-  if (!ghToken()) return toast('Configure um token GitHub primeiro.', 'error');
   toast('Enviando dados ao GitHub...', 'info');
   let ok = 0;
   for (const [key, file] of Object.entries(GH_FILES)) {
     const val = DB.get(key);
-    if (val !== null) {
-      const res = await ghPush(file, val);
-      if (res) ok++;
-    }
+    if (val !== null && await ghPush(file, val)) ok++;
   }
-  toast(ok > 0 ? `${ok} arquivo(s) enviados!` : 'Falha ao enviar. Verifique o token.', ok > 0 ? 'success' : 'error');
+  toast(ok > 0 ? `${ok} arquivo(s) enviados!` : 'Falha ao enviar. Confira GITHUB_TOKEN e suas permissões.', ok > 0 ? 'success' : 'error');
 }
 
 function saveConfig() {
@@ -2531,7 +2444,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const loadingMsg = el('loading-status');
     if (loadingMsg) loadingMsg.textContent = 'Conectando ao servidor seguro...';
-    await Promise.race([ghPull(), new Promise(r => setTimeout(r, 2500))]);
+    // O repositório privado só é acessado após autenticação administrativa.
   } catch {}
   initData();
   try {
