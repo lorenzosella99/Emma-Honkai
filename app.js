@@ -1622,7 +1622,21 @@ function renderAdminPanel() {
   const users = DB.get('users', []);
 
   container.innerHTML = `
+    <div class="admin-section">
+      <div class="admin-section-header">🧠 Assinaturas de Pensamentos</div>
+      <div class="admin-row"><span>Preço mensal</span><input class="input" id="plan-monthly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.monthly ?? 500}"></div>
+      <div class="admin-row"><span>Preço anual</span><input class="input" id="plan-yearly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.yearly ?? 4500}"></div>
+      <div class="admin-row"><span>Preço anterior mensal</span><input class="input" id="plan-old-monthly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.oldMonthly ?? 650}"></div>
+      <div class="admin-row"><span>Preço anterior anual</span><input class="input" id="plan-old-yearly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.oldYearly ?? 5500}"></div>
+      <div class="admin-row"><span>Promoção ativa</span><input id="plan-promo-enabled" type="checkbox" ${config.thoughtPlans?.promoEnabled ? "checked" : ""}></div>
+      <div class="admin-row"><span>Promo mensal</span><input class="input" id="plan-promo-monthly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.promoMonthly ?? 350}"></div>
+      <div class="admin-row"><span>Promo anual</span><input class="input" id="plan-promo-yearly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.promoYearly ?? 3000}"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveThoughtPlans()">Salvar preços</button>
+      <div class="admin-section-header" style="margin-top:12px">Assinantes ativos</div>
+      ${users.filter(u => u.thoughtSubscription && Number(u.thoughtSubscription.expiresAt) > Date.now()).map(u => '<div class="admin-row"><div>' + escapeHtml(u.username) + '<div class="admin-row-sub">' + (u.thoughtSubscription.plan === "yearly" ? "Anual" : "Mensal") + " · até " + new Date(u.thoughtSubscription.expiresAt).toLocaleDateString("pt-BR") + "</div></div></div>").join("") || '<div class="admin-row-sub">Nenhum assinante ativo.</div>'}
+    </div>
     <!-- COSTS CONFIG -->
+
     <div class="admin-section">
       <div class="admin-section-header">⚙️ Configurações de Custo</div>
       <div class="admin-row">
