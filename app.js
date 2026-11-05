@@ -1184,6 +1184,8 @@ function renderChatScreen(char, chat) {
   const img = el('chat-char-avatar-img');
   img.src = char.image;
   img.alt = char.name;
+  const chatScreen = el('screen-chat');
+  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', `url("${String(char.image || '').replace(/["\\\\]/g, '')}")`);
 
   updateCostHints();
   loadMessages();
@@ -1474,13 +1476,7 @@ async function unlockThought(btn, msgId) {
 }
 
 async function addMessage(msg) {
-  if (msg.isBot) {
-    await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
-  } else if (msg.senderId === state.currentUser.id) {
-    await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
-  } else {
-    throw new Error('Remetente inválido para esta conversa.');
-  }
+  // Atualização otimista: pinta a mensagem e guarda localmente antes de iniciar a rede.
   const messages = DB.get('messages', {});
   if (!messages[msg.chatId]) messages[msg.chatId] = [];
   if (!messages[msg.chatId].some(m => m.id === msg.id)) messages[msg.chatId].push(msg);
@@ -1493,10 +1489,30 @@ async function addMessage(msg) {
     DB.set('chats', chats);
   }
   const container = el('chat-messages');
-  const msgEl = document.createElement('div'); msgEl.innerHTML = renderMessage(msg);
-  if (msgEl.firstElementChild) container.appendChild(msgEl.firstElementChild);
-  container.scrollTop = container.scrollHeight;
-  return msg;
+  if (container && state.currentChat?.chatId === msg.chatId) {
+    const msgEl = document.createElement('div');
+    msgEl.innerHTML = renderMessage(msg);
+    if (msgEl.firstElementChild) container.appendChild(msgEl.firstElementChild);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // A gravação remota ocorre depois da renderização, sem bloquear a interface.
+  try {
+    if (msg.isBot) {
+      await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
+    } else if (msg.senderId === state.currentUser.id) {
+      await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
+    } else {
+      throw new Error('Remetente inválido para esta conversa.');
+    }
+    return msg;
+  } catch (error) {
+    const latest = DB.get('messages', {});
+    latest[msg.chatId] = (latest[msg.chatId] || []).filter(m => m.id !== msg.id);
+    DB.set('messages', latest);
+    if (state.currentChat?.chatId === msg.chatId) renderMessages(latest[msg.chatId]);
+    throw error;
+  }
 }
 
 // ─── MSG TYPE SELECTOR ────────────────────────────────────────────────────────
