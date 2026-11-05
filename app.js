@@ -1057,7 +1057,7 @@ function renderCharGrid(container, chars) {
         </div>
         <div class="char-info">
           <div class="char-name">${escapeHtml(c.name)}</div>
-          <div class="char-role">${c.role}</div>
+          <div class="char-role">${escapeHtml(c.role)}</div>
         </div>
       </div>
     `;
@@ -1106,7 +1106,7 @@ function openPlayerChat(userId) {
     isOnline: false,
     isBanned: false,
     gender: targetUser.gender,
-    botPersonality: `Sou ${targetUser.username}, um jogador. Respondo de forma casual e divertida.`
+    botPersonality: `Sou ${escapeHtml(targetUser.username)}, um jogador. Respondo de forma casual e divertida.`
   };
   state.currentChat = { charId: syntheticChar.id, char: syntheticChar };
   const chats = DB.get('chats', []);
@@ -1331,7 +1331,7 @@ async function botRespond() {
   typingEl.className = 'msg-row';
   typingEl.innerHTML = `
     <div class="msg-avatar">
-      <img src="${char.image}" alt="" onerror="this.src=''">
+      <img src="${safeImageUrl(char.image)}" alt="" onerror="this.src=''">
     </div>
     <div>
       <div class="typing-indicator">
@@ -1397,7 +1397,7 @@ async function promptThoughtUnlock(msg, char, cost, container) {
     lockEl.className = 'msg-row';
     lockEl.innerHTML = `
       <div class="msg-avatar">
-        <img src="${char.image}" alt="" onerror="this.src=''">
+        <img src="${safeImageUrl(char.image)}" alt="" onerror="this.src=''">
       </div>
       <div class="msg-bubble-wrap">
         <div class="msg-type-label thought">🧠 Pensamento bloqueado</div>
@@ -1518,7 +1518,7 @@ function renderProfileTab(container) {
     <div style="padding-bottom:calc(var(--nav-h) + 16px)">
       <div class="profile-avatar-wrap">
         <div class="profile-avatar" style="position:relative">
-          <img id="profile-avatar-img" src="${avatarSrc}" alt="${user.username}">
+          <img id="profile-avatar-img" src="${avatarSrc}" alt="${escapeHtml(user.username)}">
           <button class="avatar-edit-btn" onclick="triggerAvatarUpload()" title="Editar foto">📷</button>
         </div>
         <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="handleAvatarUpload(this)">
@@ -1688,7 +1688,7 @@ function renderOpenChats(container, chats) {
     return `
       <div class="chat-item" onclick="openChat('${char.id}')">
         <div class="chat-avatar">
-          <img src="${char.image}" alt="${escapeHtml(char.name)}" loading="lazy" onerror="this.src=''">
+          <img src="${safeImageUrl(char.image)}" alt="${escapeHtml(char.name)}" loading="lazy" onerror="this.src=''">
           <div class="chat-avatar-status ${statusClass}"></div>
         </div>
         <div class="chat-meta">
@@ -1696,7 +1696,7 @@ function renderOpenChats(container, chats) {
             <div class="chat-meta-name">${escapeHtml(char.name)}</div>
             <div class="chat-meta-time">${timeAgo(chat.lastTime)}</div>
           </div>
-          <div class="chat-meta-preview">${chat.lastMessage || 'Nenhuma mensagem ainda'}</div>
+          <div class="chat-meta-preview">${escapeHtml(chat.lastMessage || 'Nenhuma mensagem ainda')}</div>
         </div>
         ${chat.unread > 0 ? `<div class="chat-unread">${chat.unread}</div>` : ''}
       </div>
@@ -1745,7 +1745,7 @@ function renderMissionCard(mission, user, done = false) {
       <div class="mission-icon ${mission.icon === '⭐' ? 'gold' : ''}">${mission.icon}</div>
       <div class="mission-info">
         <div class="mission-title">${mission.title}</div>
-        <div class="mission-desc">${mission.desc || mission.description}</div>
+        <div class="mission-desc">${escapeHtml(mission.desc || mission.description)}</div>
         <div class="mission-progress-bar">
           <div class="mission-progress-fill" style="width:${pct}%"></div>
         </div>
@@ -1925,7 +1925,7 @@ function renderAdminPanel() {
       ${chars.map(c => `
         <div class="admin-row">
           <div class="chat-avatar" style="width:40px;height:40px">
-            <img src="${c.image}" alt="${escapeHtml(c.name)}" style="width:100%;height:100%;object-fit:cover;object-position:top;" onerror="this.src=''">
+            <img src="${safeImageUrl(c.image)}" alt="${escapeHtml(c.name)}" style="width:100%;height:100%;object-fit:cover;object-position:top;" onerror="this.src=''">
           </div>
           <div class="admin-row-info">
             <div class="admin-row-name">${escapeHtml(c.name)}</div>
@@ -2176,11 +2176,11 @@ function showAddCharModal(editId = null) {
         </div>
         <input type="file" id="cf-img-file" accept="image/*" style="display:none" onchange="previewCharImg(this)">
         <div style="font-size:.7rem;color:var(--text-3)">Ou cole uma URL abaixo:</div>
-        <input class="input" id="cf-image" value="${char?.image||''}" placeholder="https://..." oninput="syncCharImgUrl(this)">
+        <input class="input" id="cf-image" value="${safeImageUrl(char?.image||'')}" placeholder="https://..." oninput="syncCharImgUrl(this)">
       </div>
 
-      <div class="field"><label>Nome</label><input class="input" id="cf-name" value="${char?.name||''}"></div>
-      <div class="field"><label>Função/Título</label><input class="input" id="cf-role" value="${char?.role||''}"></div>
+      <div class="field"><label>Nome</label><input class="input" id="cf-name" value="${escapeHtml(char?.name||'')}"></div>
+      <div class="field"><label>Função/Título</label><input class="input" id="cf-role" value="${escapeHtml(char?.role||'')}"></div>
       <div class="field">
         <label>Gênero</label>
         <div class="chip-group" id="cf-gender">
@@ -2189,8 +2189,8 @@ function showAddCharModal(editId = null) {
           <button type="button" class="chip-select ${(!char?.gender||char?.gender==='other')?'active':''}" data-val="other" onclick="selectChip(this,'cf-gender')">✦ Outro</button>
         </div>
       </div>
-      <div class="field"><label>Descrição</label><input class="input" id="cf-desc" value="${char?.description||''}"></div>
-      <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${char?.botPersonality||''}</textarea></div>
+      <div class="field"><label>Descrição</label><input class="input" id="cf-desc" value="${escapeHtml(char?.description||'')}"></div>
+      <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${escapeHtml(char?.botPersonality||'')}</textarea></div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
         <button class="btn btn-primary flex-1" onclick="saveChar('${editId||''}', this)">Salvar</button>
@@ -2222,7 +2222,7 @@ function syncCharImgUrl(input) {
   if (thumb) thumb.src = url;
   else {
     const preview = el('cf-img-preview');
-    if (preview) preview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem">✏️</div>`;
+    if (preview) preview.innerHTML = `<img src="${safeImageUrl(url)}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem">✏️</div>`;
   }
 }
 
