@@ -10,8 +10,6 @@ const API_BASE = `https://api.github.com/repos/${GITHUB_REPO}/contents/dados`;
 
 // Mapeamento: chave local → arquivo no repo
 const GH_FILES = {
-  users:      'users.json',
-  characters: 'characters.json',
   missions:   'missions.json',
   config:     'config.json'
 };
@@ -216,7 +214,15 @@ async function loadEmmaBackendState() {
 }
 
 async function refreshEmmaBackendState() {
-  try { await loadEmmaBackendState(); } catch (e) { console.warn('Emma sync:', e); }
+  try {
+    await loadEmmaBackendState();
+    if (state.currentChat?.chatId) {
+      const current = DB.get('messages', {})[state.currentChat.chatId] || [];
+      renderMessages(current);
+    }
+    if (state.currentTab === 'profile') switchTab('profile');
+    if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden')) renderAdminPanel();
+  } catch (e) { console.warn('Emma sync:', e); }
 }
 
 function subscribeEmmaRealtime() {
@@ -239,8 +245,17 @@ const DB = {
   set(key, val) {
     try {
       localStorage.setItem('emma_' + key, JSON.stringify(val));
-      // Faz push assíncrono para o GitHub se for uma chave sincronizada
       ghPushKey(key);
+      // O perfil só sincroniza os campos editáveis do próprio usuário.
+      if (key === 'users' && emmaSupabase) {
+        const myId = localStorage.getItem('emma_current_user');
+        const me = Array.isArray(val) ? val.find(u => u.id === myId) : null;
+        if (me) emmaSupabase.from('profiles').update({
+          user_type: me.userType || 'player', gender: me.gender || 'other',
+          chat_preference: me.chatPreference || 'both', avatar: me.avatar || null,
+          allow_bot_takeover: !!me.allowBotTakeover
+        }).eq('id', myId).then(({error}) => { if (error) console.warn('Profile sync:', error.message); });
+      }
     } catch {}
   }
 };
@@ -1610,6 +1625,15 @@ async function requestCharacterRole() {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+async function adminRejectCharacterRequest(userId) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  try {
+    await emmaApi('reject_character_request', { userId });
+    await loadEmmaBackendState(); renderAdminPanel();
+    toast('Solicitação recusada.', 'success');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
 async function adminAssignCharacter(userId) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const characterId = el('assign-char-' + userId)?.value;
@@ -1879,7 +1903,7 @@ function renderAdminPanel() {
   container.innerHTML = `
     <div class="admin-section">
       <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
-      ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => !c.ownerUserId || c.ownerUserId === u.id).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
+      ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => !c.ownerUserId || c.ownerUserId === u.id).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button><button class="btn btn-secondary btn-sm" onclick="adminRejectCharacterRequest('${u.id}')">Recusar</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
     </div>
     <div class="admin-section"><div class="admin-section-header">🚨 Denúncias pendentes (${pendingReports.length})</div>
       ${pendingReports.map(r => { const reporter=users.find(u=>u.id===r.reporterId), target=users.find(u=>u.id===r.reportedUserId), c=chars.find(x=>x.id===r.characterId); return `<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>${escapeHtml(target?.username || 'Usuário removido')}</b><div class="admin-row-sub">Denunciado por ${escapeHtml(reporter?.username || 'Personagem')} em ${escapeHtml(c?.name || 'personagem')}</div><div class="admin-row-sub">${escapeHtml(r.reason)}</div></div><button class="btn btn-secondary btn-sm" onclick="adminResolveReport('${r.id}','reviewed')">Analisada</button></div>`; }).join('') || '<div class="admin-row-sub">Nenhuma denúncia pendente.</div>'}
