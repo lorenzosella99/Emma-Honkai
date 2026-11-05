@@ -391,6 +391,7 @@ function initData() {
   if (!DB.get('users')) DB.set('users', []);
   if (!DB.get('messages')) DB.set('messages', {});
   if (!DB.get('chats')) DB.set('chats', []);
+  if (!DB.get('reports')) DB.set('reports', []);
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
@@ -766,6 +767,8 @@ async function startApp() {
     checkDailyMission();
     await sleep(500);
     renderMainApp();
+    updateUserPresence();
+    if (!window._emmaPresenceTimer) window._emmaPresenceTimer = setInterval(updateUserPresence, 25000);
   } catch(e) {
     console.error('startApp error:', e);
   } finally {
@@ -913,6 +916,7 @@ function renderCharsTab(container) {
       </div>
     </div>
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
+      <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
       <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div></div>
       <div class="section-title">🤖 Bots Online</div>
       <div class="chars-grid" id="chars-grid-bots-online">
@@ -1248,6 +1252,10 @@ async function botRespond() {
 
   const char = state.currentChat.char;
   const config = cfg();
+  const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
+  const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
+  if (owner && ownerOnline) { state.isTyping = false; return; }
+  if (owner && !ownerOnline && !owner.allowBotTakeover) { state.isTyping = false; return; }
   const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
 
   // Show typing indicator
@@ -1411,6 +1419,8 @@ function updateCostHints() {
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 function renderProfileTab(container) {
   const user = state.currentUser;
+  const assignedChar = DB.get('characters', []).find(c => c.ownerUserId === user.id);
+  const myCharacterChats = assignedChar ? DB.get('chats', []).filter(c => c.charId === assignedChar.id) : [];
   const chats = DB.get('chats', []).filter(c => c.userId === user.id);
   const totalMsgs = user.totalMessages || 0;
   const chars = user.uniqueCharsContacted?.length || 0;
@@ -1461,6 +1471,17 @@ function renderProfileTab(container) {
         </div>
       </div>
 
+      ${user.userType === 'character' ? `
+        <div class="admin-section" style="margin:14px 16px;padding:16px">
+          <b>🌟 Área de personagem</b>
+          ${assignedChar ? `<div class="admin-row-sub" style="margin:8px 0">Personagem atribuído: <strong>${escapeHtml(assignedChar.name)}</strong></div>
+            <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
+            <div class="admin-row-sub">${myCharacterChats.length} conversa(s) recebida(s)</div>
+            <div id="character-inbox"></div>`
+          : `<div class="admin-row-sub" style="margin:8px 0">Você ainda não tem um personagem atribuído.</div>
+            ${user.characterRequest?.status === 'pending' ? '<span class="chip chip-gold">Solicitação aguardando o admin</span>' : `<button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar para ser personagem</button>`}`}
+        </div>
+      ` : ''}
       <div class="section-title">Chats abertos</div>
       <div class="chat-list" id="open-chats-list"></div>
 
@@ -1477,6 +1498,96 @@ function renderProfileTab(container) {
   `;
 
   renderOpenChats(el('open-chats-list'), chats);
+  if (assignedChar) renderCharacterInbox(el('character-inbox'), assignedChar, myCharacterChats);
+}
+
+function requestCharacterRole() {
+  const users = DB.get('users', []);
+  const user = users.find(u => u.id === state.currentUser.id);
+  if (!user || user.userType !== 'character') return toast('Altere seu tipo de conta para Personagem nas preferências.', 'error');
+  if (user.characterRequest?.status === 'pending') return toast('Sua solicitação já está aguardando análise.', 'info');
+  user.characterRequest = { status: 'pending', requestedAt: Date.now() };
+  DB.set('users', users); state.currentUser = user;
+  toast('Solicitação enviada ao administrador!', 'success'); switchTab('profile');
+}
+
+function adminAssignCharacter(userId) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const select = el('assign-char-' + userId);
+  const charId = select?.value;
+  if (!charId) return toast('Escolha um personagem.', 'error');
+  const users = DB.get('users', []), chars = DB.get('characters', []);
+  const user = users.find(u => u.id === userId), char = chars.find(c => c.id === charId);
+  if (!user || !char) return toast('Usuário ou personagem não encontrado.', 'error');
+  const previous = chars.find(c => c.ownerUserId === userId);
+  if (previous) { previous.ownerUserId = null; previous.isOnline = false; }
+  const oldOwner = char.ownerUserId;
+  if (oldOwner && oldOwner !== userId) {
+    const oldUser = users.find(u => u.id === oldOwner);
+    if (oldUser) oldUser.assignedCharacterId = null;
+  }
+  char.ownerUserId = userId; char.isOnline = true;
+  user.assignedCharacterId = char.id;
+  user.characterRequest = { status: 'approved', characterId: char.id, approvedAt: Date.now() };
+  DB.set('characters', chars); DB.set('users', users);
+  toast(`${char.name} atribuído a ${user.username}.`, 'success'); renderAdminPanel();
+}
+
+function setBotTakeover(enabled) {
+  const users = DB.get('users', []), user = users.find(u => u.id === state.currentUser.id);
+  if (!user) return;
+  user.allowBotTakeover = !!enabled; DB.set('users', users); state.currentUser = user;
+  toast(enabled ? 'Bot poderá assumir quando você estiver offline.' : 'Assumir automaticamente desativado.', 'success');
+}
+
+function updateUserPresence() {
+  if (!state.currentUser) return;
+  const users = DB.get('users', []), user = users.find(u => u.id === state.currentUser.id);
+  if (!user) return;
+  user.lastSeenAt = Date.now(); DB.set('users', users); state.currentUser = user;
+  const chars = DB.get('characters', []), owned = chars.find(c => c.ownerUserId === user.id);
+  if (owned) { owned.isOnline = true; DB.set('characters', chars); }
+}
+
+function renderCharacterInbox(container, character, chats) {
+  if (!container) return;
+  const users = DB.get('users', []), messages = DB.get('messages', {});
+  container.innerHTML = chats.sort((x,y)=>(y.lastTime||0)-(x.lastTime||0)).map(chat => {
+    const player = users.find(u => u.id === chat.userId);
+    const last = (messages[chat.id] || []).slice(-1)[0];
+    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')}</b><div class="admin-row-sub">${escapeHtml(last?.text || 'Sem mensagens')}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Responder</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
+  }).join('') || '<div class="admin-row-sub">As conversas dos jogadores aparecerão aqui.</div>';
+}
+
+function replyAsCharacter(chatId) {
+  const char = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser.id);
+  if (!char) return toast('Nenhum personagem atribuído.', 'error');
+  const chats = DB.get('chats', []), chat = chats.find(c => c.id === chatId && c.charId === char.id);
+  if (!chat) return toast('Conversa não encontrada.', 'error');
+  const text = prompt('Resposta como ' + char.name + ':');
+  if (!text || !text.trim()) return;
+  addMessage({ id:'m_'+Date.now(), senderId:char.id, chatId, type:'speech', text:text.trim(), timestamp:Date.now(), isBot:false, isHumanCharacter:true });
+  toast('Resposta enviada!', 'success');
+  if (state.currentTab === 'profile') switchTab('profile');
+}
+
+function reportChatPlayer(chatId) {
+  const char = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser.id);
+  const chat = DB.get('chats', []).find(c => c.id === chatId && c.charId === char?.id);
+  if (!char || !chat) return toast('Conversa não encontrada.', 'error');
+  const reason = prompt('Motivo da denúncia (assédio, spam, conteúdo impróprio etc.):');
+  if (!reason || !reason.trim()) return;
+  const reports = DB.get('reports', []);
+  reports.push({ id:'r_'+Date.now(), reporterId:state.currentUser.id, reportedUserId:chat.userId, characterId:char.id, chatId, reason:reason.trim(), status:'pending', createdAt:Date.now() });
+  DB.set('reports', reports); toast('Denúncia enviada ao administrador.', 'success');
+}
+
+function adminResolveReport(reportId, status) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const reports = DB.get('reports', []), report = reports.find(r => r.id === reportId);
+  if (!report) return;
+  report.status = status; report.reviewedAt = Date.now(); report.reviewedBy = state.currentUser.id;
+  DB.set('reports', reports); renderAdminPanel(); toast('Denúncia atualizada.', 'success');
 }
 
 function renderOpenChats(container, chats) {
@@ -1668,7 +1779,16 @@ function renderAdminPanel() {
   const config = cfg();
   const users = DB.get('users', []);
 
+  const characterRequests = users.filter(u => u.characterRequest?.status === 'pending');
+  const pendingReports = DB.get('reports', []).filter(r => r.status === 'pending');
   container.innerHTML = `
+    <div class="admin-section">
+      <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
+      ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => !c.ownerUserId || c.ownerUserId === u.id).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
+    </div>
+    <div class="admin-section"><div class="admin-section-header">🚨 Denúncias pendentes (${pendingReports.length})</div>
+      ${pendingReports.map(r => { const reporter=users.find(u=>u.id===r.reporterId), target=users.find(u=>u.id===r.reportedUserId), c=chars.find(x=>x.id===r.characterId); return `<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>${escapeHtml(target?.username || 'Usuário removido')}</b><div class="admin-row-sub">Denunciado por ${escapeHtml(reporter?.username || 'Personagem')} em ${escapeHtml(c?.name || 'personagem')}</div><div class="admin-row-sub">${escapeHtml(r.reason)}</div></div><button class="btn btn-secondary btn-sm" onclick="adminResolveReport('${r.id}','reviewed')">Analisada</button></div>`; }).join('') || '<div class="admin-row-sub">Nenhuma denúncia pendente.</div>'}
+    </div>
     <div class="admin-section">
       <div class="admin-section-header">🧠 Assinaturas de Pensamentos</div>
       <div class="admin-row"><span>Preço mensal</span><input class="input" id="plan-monthly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.monthly ?? 500}"></div>
@@ -2236,6 +2356,10 @@ function savePreferences(btn) {
 
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
 function logout() {
+  const owned = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser?.id);
+  if (owned) { owned.isOnline = false; const chars = DB.get('characters', []); DB.set('characters', chars); }
+  const presenceUsers = DB.get('users', []), leaving = presenceUsers.find(u => u.id === state.currentUser?.id);
+  if (leaving) { leaving.lastSeenAt = 0; DB.set('users', presenceUsers); }
   DB.set('current_user', null);
   state.currentUser = null;
   state.currentChat = null;
