@@ -113,6 +113,117 @@ function ghPushKey(key) {
 }
 
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
+
+/* ── Emma backend: Supabase Auth + Realtime ───────────────────────────── */
+const EMMA_SUPABASE_URL = 'https://sysmovruhfewiyshcaor.supabase.co';
+const EMMA_SUPABASE_KEY = 'sb_publishable_eQz-66IiBczNFCq9FzDxNg_Nc3E4HKT';
+const emmaSupabase = window.supabase?.createClient(EMMA_SUPABASE_URL, EMMA_SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+});
+window.emmaSupabase = emmaSupabase;
+let emmaRealtimeChannel = null;
+
+async function emmaAuthRequest(action, payload) {
+  const res = await fetch(EMMA_SUPABASE_URL + '/functions/v1/emma-auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: EMMA_SUPABASE_KEY },
+    body: JSON.stringify({ action, ...payload })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Falha na autenticação.');
+  if (data.session) {
+    const { error } = await emmaSupabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token
+    });
+    if (error) throw error;
+  }
+  return data;
+}
+
+async function emmaApi(action, payload = {}) {
+  if (!emmaSupabase) throw new Error('O serviço de autenticação não carregou. Atualize a página.');
+  const { data, error } = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
+  if (error) throw new Error(data?.error || error.message || 'Erro no servidor.');
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+function profileToAppUser(p) {
+  return {
+    id: p.id, username: p.username, isAdmin: p.role === 'admin',
+    userType: p.user_type || 'player', gender: p.gender || 'other',
+    chatPreference: p.chat_preference || 'both', avatar: p.avatar || null,
+    allowBotTakeover: !!p.allow_bot_takeover,
+    assignedCharacterId: p.assigned_character_id || null,
+    characterRequest: { status: p.character_request_status || 'none', requestedAt: p.character_request_at ? Date.parse(p.character_request_at) : null },
+    joinDate: p.created_at ? Date.parse(p.created_at) : Date.now(),
+    coins: Number(p.coins ?? cfg().startingCoins), totalMessages: 0,
+    thoughtsBought: 0, uniqueCharsContacted: [], missionProgress: {}, completedMissions: []
+  };
+}
+
+async function loadEmmaBackendState() {
+  const [pr, cr, hr, mr, rr, ar] = await Promise.all([
+    emmaSupabase.from('profiles').select('*'),
+    emmaSupabase.from('characters').select('*'),
+    emmaSupabase.from('chats').select('*'),
+    emmaSupabase.from('messages').select('*').order('created_at', { ascending: true }),
+    emmaSupabase.from('character_reports').select('*'),
+    emmaSupabase.from('character_applications').select('*')
+  ]);
+  for (const x of [pr,cr,hr,mr,rr,ar]) if (x.error) throw x.error;
+  const users = (pr.data || []).map(profileToAppUser);
+  const characters = (cr.data || []).map(c => ({
+    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
+    gender:c.gender || 'other', botPersonality:c.bot_personality || '', isBanned:!!c.is_banned,
+    ownerUserId:c.owner_user_id || null, isOnline:!!(c.owner_user_id && users.find(u=>u.id===c.owner_user_id)?.lastSeenAt)
+  }));
+  const chats = (hr.data || []).map(c => ({
+    id:c.id, userId:c.user_id, charId:c.character_id, lastMessage:c.last_message || '',
+    lastTime:Date.parse(c.last_time || c.created_at), unread:c.unread || 0, createdAt:Date.parse(c.created_at)
+  }));
+  const messages = {};
+  for (const m of (mr.data || [])) {
+    if (!messages[m.chat_id]) messages[m.chat_id] = [];
+    messages[m.chat_id].push({
+      id:m.id, chatId:m.chat_id, senderId:m.sender_user_id || m.sender_character_id,
+      type:m.message_type, text:m.body, timestamp:Date.parse(m.created_at), isBot:!!m.is_bot
+    });
+  }
+  const reports = (rr.data || []).map(r => ({
+    id:r.id, reporterId:r.reporter_user_id, reportedUserId:r.reported_user_id,
+    characterId:r.character_id, chatId:r.chat_id, reason:r.reason, status:r.status,
+    createdAt:Date.parse(r.created_at), reviewedAt:r.reviewed_at ? Date.parse(r.reviewed_at) : null
+  }));
+  const applications = (ar.data || []).map(r => ({
+    id:r.id, userId:r.user_id, status:r.status, requestedAt:Date.parse(r.requested_at),
+    assignedCharacterId:r.assigned_character_id
+  }));
+  DB.set('users', users); DB.set('characters', characters); DB.set('chats', chats);
+  DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
+  const me = users.find(u => u.id === state.currentUser?.id);
+  if (me) state.currentUser = me;
+  return { users, characters, chats, messages, reports, applications };
+}
+
+async function refreshEmmaBackendState() {
+  try { await loadEmmaBackendState(); } catch (e) { console.warn('Emma sync:', e); }
+}
+
+function subscribeEmmaRealtime() {
+  if (!emmaSupabase || emmaRealtimeChannel) return;
+  emmaRealtimeChannel = emmaSupabase.channel('emma-live-data')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refreshEmmaBackendState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'characters' }, refreshEmmaBackendState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'character_applications' }, refreshEmmaBackendState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, refreshEmmaBackendState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, refreshEmmaBackendState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'character_reports' }, refreshEmmaBackendState)
+    .subscribe();
+}
+
+
 const DB = {
   get(key, def = null) {
     try { const v = localStorage.getItem('emma_' + key); return v ? JSON.parse(v) : def; } catch { return def; }
@@ -617,63 +728,36 @@ function getChipVal(groupId, def = '') {
 function initAuth() {
   el('auth-tab-login').onclick = () => { authMode = 'login'; renderAuthScreen(); };
   el('auth-tab-register').onclick = () => { authMode = 'register'; renderAuthScreen(); };
-
-  el('auth-submit').onclick = () => {
-    if (authMode === 'recovery') return handleRecovery();
-
+  el('auth-submit').onclick = async () => {
+    if (authMode === 'recovery') return toast('Recuperação agora precisa ser feita pelo administrador.', 'info');
     const username = el('auth-username').value.trim();
     const password = el('auth-password').value;
-
     if (!username || !password) return toast('Preencha todos os campos.', 'error');
-
-    const users = DB.get('users', []);
-
-    if (authMode === 'register') {
-      if (users.find(u => (u.username || '').toLowerCase() === username.toLowerCase()))
-        return toast('Usuário já existe.', 'error');
-      if (password.length < 4) return toast('Senha muito curta.', 'error');
-
-      // Apenas quem liberou a tela com o código administrativo pode criar uma conta admin.
-      const isAdmin = gateAdminAccess;
-      const user = {
-        id: 'u_' + Date.now(),
-        username,
-        password,
-        coins: cfg().startingCoins,
-        joinDate: Date.now(),
-        isAdmin: isAdmin,
-        missionProgress: {},
-        completedMissions: [],
-        totalMessages: 0,
-        thoughtsBought: 0,
-        uniqueCharsContacted: [],
+    const submit = el('auth-submit'); submit.disabled = true;
+    try {
+      const data = await emmaAuthRequest(authMode === 'register' ? 'register' : 'login', {
+        username, password,
         userType: getChipVal('auth-usertype', 'player'),
         gender: getChipVal('auth-gender', 'other'),
-        chatPreference: getChipVal('auth-chatpref', 'both'),
-        avatar: null
-      };
-      users.push(user);
-      DB.set('users', users);
-      DB.set('current_user', user.id);
-      state.currentUser = user;
-      toast('Conta criada! +' + user.coins + '🪙 iniciais!', 'gold', 3500);
-      startApp();
-    } else {
-      const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
-      if (!user) return toast('Usuário ou senha incorretos.', 'error');
-
-      // Ban check on user
-      if (user.bannedUntil && Date.now() < user.bannedUntil) {
-        const days = Math.ceil((user.bannedUntil - Date.now()) / 86400000);
-        return showBanModal(user.banReason || 'Violação dos termos', days);
-      }
-
-      DB.set('current_user', user.id);
-      state.currentUser = user;
-      startApp();
-    }
+        chatPreference: getChipVal('auth-chatpref', 'both')
+      });
+      const p = data.profile;
+      const user = profileToAppUser({
+        id: p.id, username: p.username || username, role: p.role || 'user',
+        user_type: p.user_type || getChipVal('auth-usertype','player'),
+        gender: p.gender || getChipVal('auth-gender','other'),
+        chat_preference: p.chat_preference || getChipVal('auth-chatpref','both'),
+        created_at: p.created_at || new Date().toISOString()
+      });
+      state.currentUser = user; DB.set('current_user', user.id);
+      await loadEmmaBackendState();
+      subscribeEmmaRealtime();
+      if (authMode === 'register') toast('Conta criada! Agora seus dados ficam sincronizados.', 'success', 3500);
+      await startApp();
+    } catch (e) {
+      toast(e.message || 'Não foi possível entrar.', 'error');
+    } finally { submit.disabled = false; }
   };
-
   el('auth-password').addEventListener('keypress', e => {
     if (e.key === 'Enter') el('auth-submit').click();
   });
@@ -1509,57 +1593,43 @@ function renderProfileTab(container) {
   if (assignedChar) renderCharacterInbox(el('character-inbox'), assignedChar, myCharacterChats);
 }
 
-function requestCharacterRole() {
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === state.currentUser?.id);
-  if (!user) return toast('Faça login novamente para solicitar.', 'error');
-  if (user.assignedCharacterId || DB.get('characters', []).some(c => c.ownerUserId === user.id))
-    return toast('Você já controla um personagem.', 'info');
-  if (user.characterRequest?.status === 'pending') return toast('Sua solicitação já está aguardando análise.', 'info');
-  user.userType = 'character';
-  user.characterRequest = { status: 'pending', requestedAt: Date.now(), statusMessage: 'Aguardando análise do administrador' };
-  DB.set('users', users);
-  state.currentUser = user;
-  toast('Solicitação enviada ao administrador!', 'success');
-  switchTab('profile');
+async function requestCharacterRole() {
+  try {
+    await emmaApi('request_character');
+    await loadEmmaBackendState();
+    toast('Solicitação enviada ao administrador!', 'success');
+    switchTab('profile');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
-function adminAssignCharacter(userId) {
+async function adminAssignCharacter(userId) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
-  const select = el('assign-char-' + userId);
-  const charId = select?.value;
-  if (!charId) return toast('Escolha um personagem.', 'error');
-  const users = DB.get('users', []), chars = DB.get('characters', []);
-  const user = users.find(u => u.id === userId), char = chars.find(c => c.id === charId);
-  if (!user || !char) return toast('Usuário ou personagem não encontrado.', 'error');
-  const previous = chars.find(c => c.ownerUserId === userId);
-  if (previous) { previous.ownerUserId = null; previous.isOnline = false; }
-  const oldOwner = char.ownerUserId;
-  if (oldOwner && oldOwner !== userId) {
-    const oldUser = users.find(u => u.id === oldOwner);
-    if (oldUser) oldUser.assignedCharacterId = null;
-  }
-  char.ownerUserId = userId; char.isOnline = true;
-  user.assignedCharacterId = char.id;
-  user.characterRequest = { status: 'approved', characterId: char.id, approvedAt: Date.now() };
-  DB.set('characters', chars); DB.set('users', users);
-  toast(`${char.name} atribuído a ${user.username}.`, 'success'); renderAdminPanel();
+  const characterId = el('assign-char-' + userId)?.value;
+  if (!characterId) return toast('Escolha um personagem.', 'error');
+  try {
+    await emmaApi('assign_character', { userId, characterId });
+    await loadEmmaBackendState();
+    toast('Personagem atribuído com sucesso!', 'success');
+    renderAdminPanel();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
-function setBotTakeover(enabled) {
-  const users = DB.get('users', []), user = users.find(u => u.id === state.currentUser.id);
-  if (!user) return;
-  user.allowBotTakeover = !!enabled; DB.set('users', users); state.currentUser = user;
-  toast(enabled ? 'Bot poderá assumir quando você estiver offline.' : 'Assumir automaticamente desativado.', 'success');
+async function setBotTakeover(enabled) {
+  try {
+    await emmaApi('set_bot_takeover', { enabled: !!enabled });
+    state.currentUser.allowBotTakeover = !!enabled;
+    toast(enabled ? 'Bot poderá assumir quando você estiver offline.' : 'Assumir automaticamente desativado.', 'success');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
-function updateUserPresence() {
-  if (!state.currentUser) return;
-  const users = DB.get('users', []), user = users.find(u => u.id === state.currentUser.id);
-  if (!user) return;
-  user.lastSeenAt = Date.now(); DB.set('users', users); state.currentUser = user;
-  const chars = DB.get('characters', []), owned = chars.find(c => c.ownerUserId === user.id);
-  if (owned) { owned.isOnline = true; DB.set('characters', chars); }
+async function updateUserPresence() {
+  if (!state.currentUser || !emmaSupabase) return;
+  try {
+    await emmaApi('presence');
+    const users = DB.get('users', []);
+    const me = users.find(u => u.id === state.currentUser.id);
+    if (me) { me.lastSeenAt = Date.now(); DB.set('users', users); state.currentUser = me; }
+  } catch(e) { console.warn('Presence sync:', e); }
 }
 
 function renderCharacterInbox(container, character, chats) {
@@ -1572,35 +1642,39 @@ function renderCharacterInbox(container, character, chats) {
   }).join('') || '<div class="admin-row-sub">As conversas dos jogadores aparecerão aqui.</div>';
 }
 
-function replyAsCharacter(chatId) {
+async function replyAsCharacter(chatId) {
   const char = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser.id);
   if (!char) return toast('Nenhum personagem atribuído.', 'error');
-  const chats = DB.get('chats', []), chat = chats.find(c => c.id === chatId && c.charId === char.id);
+  const chat = DB.get('chats', []).find(c => c.id === chatId && c.charId === char.id);
   if (!chat) return toast('Conversa não encontrada.', 'error');
   const text = prompt('Resposta como ' + char.name + ':');
   if (!text || !text.trim()) return;
-  addMessage({ id:'m_'+Date.now(), senderId:char.id, chatId, type:'speech', text:text.trim(), timestamp:Date.now(), isBot:false, isHumanCharacter:true });
-  toast('Resposta enviada!', 'success');
-  if (state.currentTab === 'profile') switchTab('profile');
+  try {
+    await emmaApi('send_character_message', { chatId, text: text.trim(), type: 'speech' });
+    await refreshEmmaBackendState();
+    if (state.currentChat?.chatId === chatId) loadMessages();
+    toast('Resposta enviada!', 'success');
+    if (state.currentTab === 'profile') switchTab('profile');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
-function reportChatPlayer(chatId) {
-  const char = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser.id);
-  const chat = DB.get('chats', []).find(c => c.id === chatId && c.charId === char?.id);
-  if (!char || !chat) return toast('Conversa não encontrada.', 'error');
+async function reportChatPlayer(chatId) {
   const reason = prompt('Motivo da denúncia (assédio, spam, conteúdo impróprio etc.):');
   if (!reason || !reason.trim()) return;
-  const reports = DB.get('reports', []);
-  reports.push({ id:'r_'+Date.now(), reporterId:state.currentUser.id, reportedUserId:chat.userId, characterId:char.id, chatId, reason:reason.trim(), status:'pending', createdAt:Date.now() });
-  DB.set('reports', reports); toast('Denúncia enviada ao administrador.', 'success');
+  try {
+    await emmaApi('report_player', { chatId, reason: reason.trim() });
+    await refreshEmmaBackendState();
+    toast('Denúncia enviada ao administrador.', 'success');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
-function adminResolveReport(reportId, status) {
+async function adminResolveReport(reportId, status) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
-  const reports = DB.get('reports', []), report = reports.find(r => r.id === reportId);
-  if (!report) return;
-  report.status = status; report.reviewedAt = Date.now(); report.reviewedBy = state.currentUser.id;
-  DB.set('reports', reports); renderAdminPanel(); toast('Denúncia atualizada.', 'success');
+  try {
+    await emmaApi('review_report', { reportId, status });
+    await refreshEmmaBackendState();
+    renderAdminPanel(); toast('Denúncia atualizada.', 'success');
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function renderOpenChats(container, chats) {
