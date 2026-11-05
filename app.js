@@ -178,41 +178,54 @@ function profileToAppUser(p) {
   };
 }
 
+async function fetchAllEmmaRows(table, orderBy = null) {
+  const rows = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    let query = emmaSupabase.from(table).select('*').range(offset, offset + pageSize - 1);
+    if (orderBy) query = query.order(orderBy, { ascending: true });
+    const { data, error } = await query;
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
 async function loadEmmaBackendState() {
-  const [pr, cr, hr, mr, rr, ar] = await Promise.all([
-    emmaSupabase.from('profiles').select('*'),
-    emmaSupabase.from('characters').select('*'),
-    emmaSupabase.from('chats').select('*'),
-    emmaSupabase.from('messages').select('*').order('created_at', { ascending: true }),
-    emmaSupabase.from('character_reports').select('*'),
-    emmaSupabase.from('character_applications').select('*')
+  const [profiles, charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows] = await Promise.all([
+    fetchAllEmmaRows('profiles'),
+    fetchAllEmmaRows('characters'),
+    fetchAllEmmaRows('chats'),
+    fetchAllEmmaRows('messages', 'created_at'),
+    fetchAllEmmaRows('character_reports'),
+    fetchAllEmmaRows('character_applications')
   ]);
-  for (const x of [pr,cr,hr,mr,rr,ar]) if (x.error) throw x.error;
-  const users = (pr.data || []).map(profileToAppUser);
-  const characters = (cr.data || []).map(c => ({
+  const users = profiles.map(profileToAppUser);
+  const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:c.owner_user_id ? !!(users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000) : !!c.is_online
   }));
-  const chats = (hr.data || []).map(c => ({
+  const chats = chatsRows.map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, lastMessage:c.last_message || '',
     lastTime:Date.parse(c.last_time || c.created_at), unread:c.unread || 0, createdAt:Date.parse(c.created_at)
   }));
   const messages = {};
-  for (const m of (mr.data || [])) {
+  for (const m of messagesRows) {
     if (!messages[m.chat_id]) messages[m.chat_id] = [];
     messages[m.chat_id].push({
       id:m.id, chatId:m.chat_id, senderId:m.sender_user_id || m.sender_character_id,
       type:m.message_type, text:m.body, timestamp:Date.parse(m.created_at), isBot:!!m.is_bot
     });
   }
-  const reports = (rr.data || []).map(r => ({
+  const reports = reportsRows.map(r => ({
     id:r.id, reporterId:r.reporter_user_id, reportedUserId:r.reported_user_id,
     characterId:r.character_id, chatId:r.chat_id, reason:r.reason, status:r.status,
     createdAt:Date.parse(r.created_at), reviewedAt:r.reviewed_at ? Date.parse(r.reviewed_at) : null
   }));
-  const applications = (ar.data || []).map(r => ({
+  const applications = applicationsRows.map(r => ({
     id:r.id, userId:r.user_id, status:r.status, requestedAt:Date.parse(r.requested_at),
     assignedCharacterId:r.assigned_character_id
   }));
