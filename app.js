@@ -113,8 +113,8 @@ function ghPushKey(key) {
 // ─── DATA LAYER ──────────────────────────────────────────────────────────────
 
 /* ── Emma backend: Supabase Auth + Realtime ───────────────────────────── */
-const EMMA_SUPABASE_URL = 'https://sysmovruhfewiyshcaor.supabase.co';
-const EMMA_SUPABASE_KEY = 'sb_publishable_eQz-66IiBczNFCq9FzDxNg_Nc3E4HKT';
+const EMMA_SUPABASE_URL = 'https://mkzevrxmonducocoupcc.supabase.co';
+const EMMA_SUPABASE_KEY = 'sb_publishable_ZQ4vwpNWKjipt1AkuZpXPA_l8BxA7Ao';
 const emmaSupabase = window.supabase?.createClient(EMMA_SUPABASE_URL, EMMA_SUPABASE_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
 });
@@ -753,7 +753,7 @@ function initAuth() {
   el('auth-tab-register').onclick = () => { authMode = 'register'; renderAuthScreen(); };
   el('auth-submit').onclick = async () => {
     if (authMode === 'recovery') return toast('Recuperação agora precisa ser feita pelo administrador.', 'info');
-    const username = el('auth-username').value.trim();
+    const username = el('auth-username').value.trim().toLowerCase();
     const password = el('auth-password').value;
     if (!username || !password) return toast('Preencha todos os campos.', 'error');
     const submit = el('auth-submit'); submit.disabled = true;
