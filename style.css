@@ -1154,3 +1154,21 @@ img { display: block; }
   .chars-grid { grid-template-columns: repeat(4, 1fr); }
   .chat-messages { max-width: 700px; margin: 0 auto; }
 }
+
+
+/* Layout refinements: framed app, wider chat, compact navigation and plan promo */
+#screen-main, #screen-chat, #screen-admin { background: radial-gradient(ellipse at top, rgba(139,92,246,.08), transparent 55%), var(--bg-0); }
+#tab-content, #admin-content { width: min(100% - 28px, 1180px); margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: rgba(16,17,26,.72); }
+#screen-main .bottom-nav { width: min(100% - 28px, 1180px); margin: 0 auto 10px; border: 1px solid var(--border); border-radius: 14px; min-height: 58px; height: 58px; box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+#screen-main .nav-btn { padding: 7px 5px; gap: 3px; font-size: .68rem; }
+#screen-chat { width: min(100% - 28px, 1180px); left: 14px; right: 14px; margin: 0 auto; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; top: 10px; bottom: 10px; height: calc(100dvh - 20px); box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+#screen-chat .chat-messages { width: 100%; max-width: none; padding: 18px clamp(14px, 4vw, 52px); }
+#screen-chat .chat-input-bar, #screen-chat .thought-toggle, #screen-chat .thought-cost-hint { padding-left: clamp(14px, 4vw, 52px); padding-right: clamp(14px, 4vw, 52px); }
+#screen-chat .chat-header { padding-left: 18px; padding-right: 18px; }
+#screen-admin { width: min(100% - 28px, 1180px); left: 14px; right: 14px; margin: 0 auto; top: 10px; bottom: 10px; height: calc(100dvh - 20px); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+#screen-admin .app-header { flex-shrink: 0; }
+#screen-admin #admin-content { overflow-y: auto; flex: 1; width: 100%; border: 0; padding: 8px clamp(12px, 3vw, 28px); }
+#screen-main .app-header { padding-left: 20px; padding-right: 20px; }
+.plan-promo-banner { margin: 10px 16px 14px; padding: 12px 14px; border: 1px solid var(--border-bright); border-radius: 12px; background: linear-gradient(110deg,rgba(139,92,246,.14),rgba(192,132,252,.06)); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.plan-promo-banner small { color: var(--text-2); display:block; margin-top:3px; }
+@media (max-width: 520px) { #screen-main .bottom-nav { width: calc(100% - 16px); margin-bottom: 6px; } #screen-chat, #screen-admin { width: calc(100% - 12px); left: 6px; right: 6px; top: 6px; bottom: 6px; height: calc(100dvh - 12px); } #tab-content { width: calc(100% - 12px); } }
