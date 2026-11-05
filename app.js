@@ -1510,7 +1510,7 @@ function renderProfileTab(container) {
   const chats = DB.get('chats', []).filter(c => c.userId === user.id);
   const totalMsgs = user.totalMessages || 0;
   const chars = user.uniqueCharsContacted?.length || 0;
-  const avatarSrc = user.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.username)}`;
+  const avatarSrc = safeImageUrl(user.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.username)}`);
   const genderLabel = user.gender === 'female' ? '♀ Mulher' : user.gender === 'male' ? '♂ Homem' : '✦ Outro';
   const typeLabel = user.userType === 'character' ? '🌟 Personagem' : '🎮 Jogador';
   const prefLabel = { both:'👥 Todos', bots:'🤖 Só Bots', female:'♀ Mulheres', male:'♂ Homens' }[user.chatPreference || 'both'];
@@ -1744,9 +1744,9 @@ function renderMissionCard(mission, user, done = false) {
 
   return `
     <div class="mission-card ${done ? 'completed' : ''}">
-      <div class="mission-icon ${mission.icon === '⭐' ? 'gold' : ''}">${mission.icon}</div>
+      <div class="mission-icon ${mission.icon === '⭐' ? 'gold' : ''}">${escapeHtml(mission.icon)}</div>
       <div class="mission-info">
-        <div class="mission-title">${mission.title}</div>
+        <div class="mission-title">${escapeHtml(mission.title)}</div>
         <div class="mission-desc">${escapeHtml(mission.desc || mission.description)}</div>
         <div class="mission-progress-bar">
           <div class="mission-progress-fill" style="width:${pct}%"></div>
