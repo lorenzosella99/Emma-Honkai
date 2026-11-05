@@ -1478,17 +1478,18 @@ function renderProfileTab(container) {
         </div>
       </div>
 
-      ${user.userType === 'character' ? `
-        <div class="admin-section" style="margin:14px 16px;padding:16px">
-          <b>🌟 Área de personagem</b>
-          ${assignedChar ? `<div class="admin-row-sub" style="margin:8px 0">Personagem atribuído: <strong>${escapeHtml(assignedChar.name)}</strong></div>
-            <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
-            <div class="admin-row-sub">${myCharacterChats.length} conversa(s) recebida(s)</div>
-            <div id="character-inbox"></div>`
-          : `<div class="admin-row-sub" style="margin:8px 0">Você ainda não tem um personagem atribuído.</div>
-            ${user.characterRequest?.status === 'pending' ? '<span class="chip chip-gold">Solicitação aguardando o admin</span>' : `<button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar para ser personagem</button>`}`}
-        </div>
-      ` : ''}
+      <div class="admin-section" style="margin:14px 16px;padding:16px">
+        <b>🌟 Área de personagem</b>
+        ${assignedChar ? `<div class="admin-row-sub" style="margin:8px 0">Personagem atribuído: <strong>${escapeHtml(assignedChar.name)}</strong></div>
+          <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
+          <div class="admin-row-sub">${myCharacterChats.length} conversa(s) recebida(s)</div>
+          <div id="character-inbox"></div>`
+        : user.characterRequest?.status === 'pending'
+          ? '<div class="admin-row-sub" style="margin:8px 0">Solicitação enviada. Aguarde o administrador escolher seu personagem.</div><span class="chip chip-gold">Em análise</span>'
+          : user.characterRequest?.status === 'rejected'
+            ? '<div class="admin-row-sub" style="margin:8px 0">Sua solicitação anterior não foi aprovada. Você pode solicitar novamente.</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar novamente</button>'
+            : '<div class="admin-row-sub" style="margin:8px 0">Quer interpretar um personagem e conversar com outros jogadores?</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Quero ser um personagem</button>'}
+      </div>
       <div class="section-title">Chats abertos</div>
       <div class="chat-list" id="open-chats-list"></div>
 
@@ -1510,12 +1511,17 @@ function renderProfileTab(container) {
 
 function requestCharacterRole() {
   const users = DB.get('users', []);
-  const user = users.find(u => u.id === state.currentUser.id);
-  if (!user || user.userType !== 'character') return toast('Altere seu tipo de conta para Personagem nas preferências.', 'error');
+  const user = users.find(u => u.id === state.currentUser?.id);
+  if (!user) return toast('Faça login novamente para solicitar.', 'error');
+  if (user.assignedCharacterId || DB.get('characters', []).some(c => c.ownerUserId === user.id))
+    return toast('Você já controla um personagem.', 'info');
   if (user.characterRequest?.status === 'pending') return toast('Sua solicitação já está aguardando análise.', 'info');
-  user.characterRequest = { status: 'pending', requestedAt: Date.now() };
-  DB.set('users', users); state.currentUser = user;
-  toast('Solicitação enviada ao administrador!', 'success'); switchTab('profile');
+  user.userType = 'character';
+  user.characterRequest = { status: 'pending', requestedAt: Date.now(), statusMessage: 'Aguardando análise do administrador' };
+  DB.set('users', users);
+  state.currentUser = user;
+  toast('Solicitação enviada ao administrador!', 'success');
+  switchTab('profile');
 }
 
 function adminAssignCharacter(userId) {
@@ -1786,7 +1792,7 @@ function renderAdminPanel() {
   const config = cfg();
   const users = DB.get('users', []);
 
-  const characterRequests = users.filter(u => u.characterRequest?.status === 'pending');
+  const characterRequests = users.filter(u => u.characterRequest?.status === 'pending' && !u.assignedCharacterId && !chars.some(c => c.ownerUserId === u.id));
   const pendingReports = DB.get('reports', []).filter(r => r.status === 'pending');
   container.innerHTML = `
     <div class="admin-section">
