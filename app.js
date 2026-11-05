@@ -42,7 +42,7 @@ async function ghFetch(filename) {
       if (apiRes.ok) {
         const file = await apiRes.json();
         if (file.sha) _ghSHAs[filename] = file.sha;
-        const decoded = decodeURIComponent(escape(atob((file.content || '').replace(/\\s/g, ''))));
+        const decoded = decodeURIComponent(escape(atob((file.content || '').replace(/\s/g, ''))));
         return JSON.parse(decoded);
       }
     }
