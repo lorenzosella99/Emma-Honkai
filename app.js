@@ -2008,6 +2008,7 @@ function renderAdminPanel() {
           </div>
           <div class="admin-actions">
             <button class="btn btn-xs btn-secondary" onclick="adminResetPassword('${u.id}')" title="Redefinir senha">🔑</button>
+            ${u.id !== state.currentUser.id ? `<button class="btn btn-xs ${u.isAdmin ? 'btn-danger' : 'btn-secondary'}" onclick="adminSetUserRole('${u.id}','${u.isAdmin ? 'user' : 'admin'}')" title="${u.isAdmin ? 'Remover admin' : 'Tornar admin'}">${u.isAdmin ? 'Tirar admin' : 'Tornar admin'}</button>` : ''}
             <button class="btn btn-xs btn-secondary" onclick="adminAddCoins('${u.id}')" title="Adicionar moedas">🪙+</button>
             ${u.subscriptionRenewalBanned
               ? `<button class="btn btn-xs btn-secondary" onclick="adminSetSubscriptionBan('${u.id}', false)">Liberar renovação</button>`
@@ -2069,6 +2070,17 @@ function renderAdminPanel() {
 
     <div style="height:32px"></div>
   `;
+}
+
+async function adminSetUserRole(userId, role) {
+  try {
+    await emmaApi('set_user_role', { userId, role });
+    await loadEmmaBackendState();
+    toast(role === 'admin' ? 'Usuário promovido a administrador.' : 'Acesso de administrador removido.', 'success');
+    renderAdminPanel();
+  } catch (e) {
+    toast(e.message || 'Não foi possível alterar o cargo.', 'error');
+  }
 }
 
 function saveGhToken() {
