@@ -494,11 +494,14 @@ function checkAndCleanBans() {
 }
 
 // ─── GATE / ACCESS CODE ───────────────────────────────────────────────────────
+let gateAdminAccess = false;
+
 function initGate() {
   el('gate-submit').onclick = () => {
     const code = el('gate-code').value.trim().toUpperCase();
     const config = cfg();
     if (code === config.accessCode || code === config.adminCode) {
+      gateAdminAccess = code === String(config.adminCode || '').trim().toUpperCase();
       DB.set('access_verified', true);
       showScreen('screen-auth');
       renderAuthScreen();
@@ -625,8 +628,8 @@ function initAuth() {
         return toast('Usuário já existe.', 'error');
       if (password.length < 4) return toast('Senha muito curta.', 'error');
 
-      // O cadastro não concede privilégios administrativos pelo nome ou senha.
-      const isAdmin = false;
+      // Apenas quem liberou a tela com o código administrativo pode criar uma conta admin.
+      const isAdmin = gateAdminAccess;
       const user = {
         id: 'u_' + Date.now(),
         username,
@@ -2125,6 +2128,7 @@ function logout() {
   state.currentUser = null;
   state.currentChat = null;
   DB.set('access_verified', false);
+  gateAdminAccess = false;
   el('gate-code').value = '';
   showScreen('screen-gate');
   initGate();
