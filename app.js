@@ -1247,7 +1247,8 @@ function renderMessages(messages) {
 }
 
 function renderMessage(msg) {
-  const isUser = msg.senderId === state.currentUser.id;
+  const viewingAsController = state.currentChat?.char?.ownerUserId === state.currentUser.id;
+  const isUser = msg.senderId === (viewingAsController ? state.currentChat.userId : state.currentUser.id);
   const avatarSrc = isUser ? '' : (DB.get('characters', []).find(c => c.id === msg.senderId)?.image || '');
 
   const avatarHtml = !isUser ? `
@@ -1295,6 +1296,16 @@ async function sendMessage() {
   const input = el('chat-input');
   const text = input.value.trim();
   if (!text || state.isTyping) return;
+
+  // Se quem está digitando é o controlador do personagem, a fala sai como personagem e não cobra moedas.
+  if (state.currentChat?.char?.ownerUserId === state.currentUser.id) {
+    const chatId = state.currentChat.chatId, type = state.messageType;
+    input.value = ''; input.style.height = 'auto';
+    emmaApi('send_character_message', { chatId, text, type })
+      .then(async () => { await refreshEmmaBackendState(); if (state.currentChat?.chatId === chatId) loadMessages(); })
+      .catch(e => toast(e.message, 'error'));
+    return;
+  }
 
   const type = state.messageType; // speech, thought, action
   const config = cfg();
@@ -1670,7 +1681,7 @@ function renderCharacterInbox(container, character, chats) {
   container.innerHTML = chats.sort((x,y)=>(y.lastTime||0)-(x.lastTime||0)).map(chat => {
     const player = users.find(u => u.id === chat.userId);
     const last = (messages[chat.id] || []).slice(-1)[0];
-    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')}</b><div class="admin-row-sub">${escapeHtml(last?.text || 'Sem mensagens')}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Responder</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
+    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')}</b><div class="admin-row-sub">${escapeHtml(last?.text || 'Sem mensagens')}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Abrir conversa</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
   }).join('') || '<div class="admin-row-sub">As conversas dos jogadores aparecerão aqui.</div>';
 }
 
@@ -1679,15 +1690,10 @@ async function replyAsCharacter(chatId) {
   if (!char) return toast('Nenhum personagem atribuído.', 'error');
   const chat = DB.get('chats', []).find(c => c.id === chatId && c.charId === char.id);
   if (!chat) return toast('Conversa não encontrada.', 'error');
-  const text = prompt('Resposta como ' + char.name + ':');
-  if (!text || !text.trim()) return;
-  try {
-    await emmaApi('send_character_message', { chatId, text: text.trim(), type: 'speech' });
-    await refreshEmmaBackendState();
-    if (state.currentChat?.chatId === chatId) loadMessages();
-    toast('Resposta enviada!', 'success');
-    if (state.currentTab === 'profile') switchTab('profile');
-  } catch(e) { toast(e.message, 'error'); }
+  state.currentChat = { charId: char.id, char, chatId, userId: chat.userId };
+  renderChatScreen(char, chat);
+  el('chat-char-status').textContent = 'Você está respondendo como ' + char.name;
+  showScreen('screen-chat');
 }
 
 async function reportChatPlayer(chatId) {
