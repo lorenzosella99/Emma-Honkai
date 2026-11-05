@@ -193,13 +193,14 @@ async function fetchAllEmmaRows(table, orderBy = null) {
 }
 
 async function loadEmmaBackendState() {
-  const [profiles, charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows] = await Promise.all([
+  const [profiles, charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows] = await Promise.all([
     fetchAllEmmaRows('profiles'),
     fetchAllEmmaRows('characters'),
     fetchAllEmmaRows('chats'),
     fetchAllEmmaRows('messages', 'created_at'),
     fetchAllEmmaRows('character_reports'),
-    fetchAllEmmaRows('character_applications')
+    fetchAllEmmaRows('character_applications'),
+    fetchAllEmmaRows('missions')
   ]);
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
@@ -231,6 +232,7 @@ async function loadEmmaBackendState() {
   }));
   DB.set('users', users); DB.set('characters', characters); DB.set('chats', chats);
   DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
+  DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
   if (state.currentUser?.bannedUntil && Date.now() < state.currentUser.bannedUntil) {
@@ -1827,29 +1829,16 @@ function renderMissionCard(mission, user, done = false) {
 }
 
 async function claimMission(missionId, event) {
-  const missions = DB.get('missions', []);
-  const mission = missions.find(m => m.id === missionId);
+  const mission = DB.get('missions', []).find(m => m.id === missionId);
   if (!mission) return;
-
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === state.currentUser.id);
-  if (!user.completedMissions) user.completedMissions = [];
-  if (user.completedMissions.includes(missionId)) return;
-
-  user.coins += mission.reward;
-  user.completedMissions.push(missionId);
-  DB.set('users', users);
-  state.currentUser = user;
-  try { await syncMyProfileFromAppUser(user); } catch(e) { toast('Recompensa local; sincronização pendente.', 'error'); }
-
-  // Coin animation
-  const rect = event.target.getBoundingClientRect();
-  coinFly(mission.reward, rect.left, rect.top);
-
-  toast(`+${mission.reward}🪙 — ${mission.title} concluída!`, 'gold', 3000);
-  updateCoinsDisplay();
-  switchTab('missions');
-  updateNavBadges();
+  try {
+    const result = await emmaApi('claim_mission', {missionId});
+    await loadEmmaBackendState();
+    const rect = event.target.getBoundingClientRect();
+    coinFly(result.reward, rect.left, rect.top);
+    toast(`+${result.reward}🪙 — ${mission.title} concluída!`, 'gold', 3000);
+    updateCoinsDisplay(); switchTab('missions'); updateNavBadges();
+  } catch(e) { toast(e.message || 'Não foi possível resgatar a missão.', 'error'); }
 }
 
 function updateMissionProgress(type, value) {
@@ -2257,11 +2246,12 @@ async function unbanUser(userId) {
   catch(e) { toast(e.message, 'error'); }
 }
 
-function deleteMission(missionId) {
-  const missions = DB.get('missions', []).filter(m => m.id !== missionId);
-  DB.set('missions', missions);
-  toast('Missão removida.', 'info');
-  renderAdminPanel();
+async function deleteMission(missionId) {
+  try {
+    await emmaApi('admin_delete_mission', {missionId});
+    const missions = DB.get('missions', []).filter(m => m.id !== missionId);
+    DB.set('missions', missions); toast('Missão removida.', 'info'); renderAdminPanel();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function showAddCharModal(editId = null) {
@@ -2410,25 +2400,21 @@ function showAddMissionModal() {
   document.body.appendChild(overlay);
 }
 
-function saveMission(btn) {
+async function saveMission(btn) {
   const overlay = btn.closest('.modal-overlay');
   const title = el('mf-title').value.trim();
   if (!title) return toast('Título obrigatório.', 'error');
-  const missions = DB.get('missions', []);
-  missions.push({
-    id: 'm_' + Date.now(),
-    title,
-    description: el('mf-desc').value.trim(),
-    icon: el('mf-icon').value || '🎯',
-    reward: parseInt(el('mf-reward').value) || 50,
-    target: parseInt(el('mf-target').value) || 1,
-    type: el('mf-type').value,
-    isNewUser: false
-  });
-  DB.set('missions', missions);
-  overlay.remove();
-  toast('Missão criada!', 'success');
-  renderAdminPanel();
+  const mission = {
+    id: 'm_' + Date.now(), title, description: el('mf-desc').value.trim(),
+    icon: el('mf-icon').value || '🎯', reward: parseInt(el('mf-reward').value) || 50,
+    target: parseInt(el('mf-target').value) || 1, type: el('mf-type').value, isNewUser: false
+  };
+  try {
+    await emmaApi('admin_save_mission', {mission});
+    DB.set('missions', [...DB.get('missions', []), mission]);
+    overlay.remove(); toast('Missão salva no Supabase!', 'success');
+    await loadEmmaBackendState(); renderAdminPanel();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 // ─── AVATAR UPLOAD ───────────────────────────────────────────────────────────
