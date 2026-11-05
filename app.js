@@ -107,15 +107,19 @@ async function fetchAllEmmaRows(table, orderBy = null) {
 }
 
 async function loadEmmaBackendState() {
-  const [profiles, charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows, settingsRows] = await Promise.all([
-    fetchAllEmmaRows('profiles'),
+  const profileResult = state.currentUser?.isAdmin
+    ? await emmaApi('admin_list_profiles')
+    : await emmaSupabase.from('profiles').select('*').eq('id', state.currentUser.id);
+  if (profileResult.error) throw profileResult.error;
+  const profiles = state.currentUser?.isAdmin ? (profileResult.profiles || []) : (profileResult.data || []);
+  const [charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
     fetchAllEmmaRows('characters'),
     fetchAllEmmaRows('chats'),
     fetchAllEmmaRows('messages', 'created_at'),
     fetchAllEmmaRows('character_reports'),
     fetchAllEmmaRows('character_applications'),
     fetchAllEmmaRows('missions'),
-    fetchAllEmmaRows('app_settings')
+    emmaApi('get_public_config')
   ]);
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
@@ -148,8 +152,7 @@ async function loadEmmaBackendState() {
   DB.set('users', users); DB.set('characters', characters); DB.set('chats', chats);
   DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
   DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
-  const plansSetting = settingsRows.find(x => x.key === 'thought_plans');
-  if (plansSetting?.value) { const config = cfg(); config.thoughtPlans = plansSetting.value; DB.set('config', config); }
+  if (publicConfig?.config) { const config = cfg(); Object.assign(config, publicConfig.config); DB.set('config', config); }
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
   if (state.currentUser?.bannedUntil && Date.now() < state.currentUser.bannedUntil) {
@@ -215,8 +218,6 @@ const DB = {
 
 // ─── CONFIG DEFAULT ──────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
-  accessCode: 'EMMA2024',
-  adminCode: 'ADMIN_EMMA99',
   thoughtCost: 10,
   thoughtPlans: { monthly: 500, yearly: 4500, oldMonthly: 650, oldYearly: 5500, promoEnabled: false, promoMonthly: 350, promoYearly: 3000 },
   actionCost: 5,
@@ -521,7 +522,7 @@ function toast(msg, type = 'info', duration = 3000) {
   const container = el('toast-container');
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  t.innerHTML = `<span>${icons[type] || '•'}</span><span>${msg}</span>`;
+  t.innerHTML = `<span>${icons[type] || '•'}</span><span>${escapeHtml(msg)}</span>`;
   container.appendChild(t);
   setTimeout(() => {
     t.classList.add('leaving');
@@ -589,24 +590,21 @@ function checkAndCleanBans() {
 let gateAdminAccess = false;
 
 function initGate() {
-  el('gate-submit').onclick = () => {
+  el('gate-submit').onclick = async () => {
     const code = el('gate-code').value.trim().toUpperCase();
-    const config = cfg();
-    if (code === config.accessCode || code === config.adminCode) {
-      gateAdminAccess = code === String(config.adminCode || '').trim().toUpperCase();
+    try {
+      await emmaAuthRequest('validate_gate', {inviteCode:code});
+      gateAdminAccess = false;
+      sessionStorage.setItem('emma_invite_code', code);
       DB.set('access_verified', true);
-      showScreen('screen-auth');
-      renderAuthScreen();
-      initAuth();
-    } else {
+      showScreen('screen-auth'); renderAuthScreen(); initAuth();
+    } catch (e) {
       toast('Código inválido. Entre em contato com um admin no Discord.', 'error');
       el('gate-code').classList.add('shake');
       setTimeout(() => el('gate-code').classList.remove('shake'), 500);
     }
   };
-  el('gate-code').addEventListener('keypress', e => {
-    if (e.key === 'Enter') el('gate-submit').click();
-  });
+  el('gate-code').addEventListener('keypress', e => { if (e.key === 'Enter') el('gate-submit').click(); });
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -744,7 +742,7 @@ function initAuth() {
     const submit = el('auth-submit'); submit.disabled = true;
     try {
       const data = await emmaAuthRequest(authMode === 'register' ? 'register' : 'login', {
-        username, password,
+        username, password, inviteCode: sessionStorage.getItem('emma_invite_code') || '',
         userType: getChipVal('auth-usertype', 'player'),
         gender: getChipVal('auth-gender', 'other'),
         chatPreference: getChipVal('auth-chatpref', 'both')
@@ -772,35 +770,6 @@ function initAuth() {
 }
 
 // ─── PASSWORD RECOVERY ───────────────────────────────────────────────────────
-function handleRecovery() {
-  const username = (el('recovery-username')?.value || '').trim();
-  const newPass  = (el('recovery-newpass')?.value || '');
-  const adminCode = (el('recovery-admincode')?.value || '').trim();
-
-  if (!username) return toast('Digite seu nome de usuário.', 'error');
-  if (!newPass || newPass.length < 4) return toast('Nova senha muito curta.', 'error');
-  if (!adminCode) return toast('Código admin obrigatório.', 'error');
-
-  if (adminCode !== cfg().adminCode) {
-    toast('Código admin inválido. Peça ao administrador.', 'error');
-    el('recovery-admincode').classList.add('shake');
-    setTimeout(() => el('recovery-admincode')?.classList.remove('shake'), 500);
-    return;
-  }
-
-  const users = DB.get('users', []);
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-  if (!user) return toast('Usuário não encontrado.', 'error');
-
-  user.password = newPass;
-  DB.set('users', users);
-  toast('Senha redefinida com sucesso! Faça login.', 'success', 3500);
-  authMode = 'login';
-  renderAuthScreen();
-  // Pre-fill username
-  setTimeout(() => { if (el('auth-username')) el('auth-username').value = username; }, 50);
-}
-
 // Admin reset (from admin panel)
 function adminResetPassword(userId) {
   const overlay = document.createElement('div');
@@ -837,7 +806,7 @@ function showBanModal(reason, days) {
       <div class="modal-handle"></div>
       <div class="modal-title">🚫 Conta Banida</div>
       <div class="modal-body">
-        <strong>Motivo:</strong> ${reason}<br><br>
+        <strong>Motivo:</strong> ${escapeHtml(reason)}<br><br>
         Sua conta foi suspensa por <strong>${days} dia(s)</strong>.
         Entre em contato no Discord se acredita que foi um erro:<br>
         <strong>lorenzo00496</strong> ou <strong>inlovecolette</strong>
@@ -1083,11 +1052,11 @@ function renderCharGrid(container, chars) {
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img src="${imgSrc}" alt="${c.name}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          <img src="${imgSrc}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
-          <div class="char-name">${c.name}</div>
+          <div class="char-name">${escapeHtml(c.name)}</div>
           <div class="char-role">${c.role}</div>
         </div>
       </div>
@@ -1223,7 +1192,7 @@ function renderMessages(messages) {
 function renderMessage(msg) {
   const viewingAsController = state.currentChat?.char?.ownerUserId === state.currentUser.id;
   const isUser = msg.senderId === (viewingAsController ? state.currentChat.userId : state.currentUser.id);
-  const avatarSrc = isUser ? '' : (DB.get('characters', []).find(c => c.id === msg.senderId)?.image || '');
+  const avatarSrc = isUser ? '' : safeImageUrl(DB.get('characters', []).find(c => c.id === msg.senderId)?.image || '');
 
   const avatarHtml = !isUser ? `
     <div class="msg-avatar">
@@ -1261,8 +1230,12 @@ function renderMessage(msg) {
   `;
 }
 
-function escapeHtml(text) {
-  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function safeImageUrl(value) {
+  try { const u = new URL(String(value || ''), location.origin); return ['https:','http:'].includes(u.protocol) ? u.href : ''; }
+  catch { return ''; }
 }
 
 // ─── SEND MESSAGE ─────────────────────────────────────────────────────────────
@@ -1718,12 +1691,12 @@ function renderOpenChats(container, chats) {
     return `
       <div class="chat-item" onclick="openChat('${char.id}')">
         <div class="chat-avatar">
-          <img src="${char.image}" alt="${char.name}" loading="lazy" onerror="this.src=''">
+          <img src="${char.image}" alt="${escapeHtml(char.name)}" loading="lazy" onerror="this.src=''">
           <div class="chat-avatar-status ${statusClass}"></div>
         </div>
         <div class="chat-meta">
           <div class="chat-meta-top">
-            <div class="chat-meta-name">${char.name}</div>
+            <div class="chat-meta-name">${escapeHtml(char.name)}</div>
             <div class="chat-meta-time">${timeAgo(chat.lastTime)}</div>
           </div>
           <div class="chat-meta-preview">${chat.lastMessage || 'Nenhuma mensagem ainda'}</div>
@@ -1955,10 +1928,10 @@ function renderAdminPanel() {
       ${chars.map(c => `
         <div class="admin-row">
           <div class="chat-avatar" style="width:40px;height:40px">
-            <img src="${c.image}" alt="${c.name}" style="width:100%;height:100%;object-fit:cover;object-position:top;" onerror="this.src=''">
+            <img src="${c.image}" alt="${escapeHtml(c.name)}" style="width:100%;height:100%;object-fit:cover;object-position:top;" onerror="this.src=''">
           </div>
           <div class="admin-row-info">
-            <div class="admin-row-name">${c.name}</div>
+            <div class="admin-row-name">${escapeHtml(c.name)}</div>
             <div class="admin-row-sub">${c.isBanned ? '🚫 Banido' : (c.isOnline ? '🟢 Online' : '⚫ Offline')}</div>
           </div>
           <div class="admin-actions">
@@ -2071,14 +2044,19 @@ async function manualGhPush() {
   toast(ok > 0 ? `${ok} arquivo(s) enviados!` : 'Falha ao enviar. Confira GITHUB_TOKEN e suas permissões.', ok > 0 ? 'success' : 'error');
 }
 
-function saveConfig() {
+async function saveConfig() {
   const config = cfg();
-  config.thoughtCost = parseInt(el('cost-thought-cfg').value) || 0;
-  config.actionCost = parseInt(el('cost-action-cfg').value) || 0;
-  config.speechCost = parseInt(el('cost-speech-cfg').value) || 0;
-  config.accessCode = el('access-code-cfg').value.trim() || config.accessCode;
-  DB.set('config', config);
-  toast('Configurações salvas!', 'success');
+  const next = {
+    thoughtCost: Math.max(0, Math.min(100000, Number(el('cost-thought-cfg').value) || 0)),
+    actionCost: Math.max(0, Math.min(100000, Number(el('cost-action-cfg').value) || 0)),
+    speechCost: Math.max(0, Math.min(100000, Number(el('cost-speech-cfg').value) || 0)),
+    accessCode: String(el('access-code-cfg')?.value || '').trim().toUpperCase()
+  };
+  try {
+    const result = await emmaApi('admin_save_public_config', next);
+    Object.assign(config, result.config || next); DB.set('config', config);
+    toast('Configurações salvas no servidor.', 'success');
+  } catch (e) { toast(e.message || 'Não foi possível salvar.', 'error'); }
 }
 
 async function toggleCharOnline(charId, isOnline) {
@@ -2122,7 +2100,7 @@ async function banChar(charId, btn) {
   const char = chars.find(c => c.id === charId);
   if (!char) return;
   const old = {...char}; char.isBanned = true; char.banReason = reason; char.banUntil = Date.now() + days * 86400000; char.isOnline = false;
-  try { await emmaApi('admin_save_character', {character:char}); DB.set('characters', chars); overlay.remove(); toast(`${char.name} banido por ${days} dias.`, 'error'); renderAdminPanel(); }
+  try { await emmaApi('admin_save_character', {character:char}); DB.set('characters', chars); overlay.remove(); toast(`${escapeHtml(char.name)} banido por ${days} dias.`, 'error'); renderAdminPanel(); }
   catch(e) { Object.assign(char,old); toast(e.message, 'error'); }
 }
 
