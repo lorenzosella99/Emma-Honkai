@@ -170,7 +170,9 @@ function profileToAppUser(p) {
     coins: Number(p.coins ?? cfg().startingCoins), totalMessages: Number(p.total_messages || 0),
     thoughtsBought: Number(p.thoughts_bought || 0), uniqueCharsContacted: Array.isArray(p.unique_chars_contacted) ? p.unique_chars_contacted : [],
     missionProgress: p.mission_progress || {}, completedMissions: Array.isArray(p.completed_missions) ? p.completed_missions : [],
-    thoughtSubscription: p.thought_subscription || null, subscriptionRenewalBanned: !!p.subscription_renewal_banned,
+    thoughtSubscription: p.thought_subscription || null,
+    thoughtSubscriptionHistory: Array.isArray(p.thought_subscription_history) ? p.thought_subscription_history : [],
+    subscriptionRenewalBanned: !!p.subscription_renewal_banned,
     bannedUntil: p.banned_until ? Date.parse(p.banned_until) : null, banReason: p.ban_reason || '',
     coinHistory: Array.isArray(p.coin_history) ? p.coin_history : []
   };
@@ -191,14 +193,15 @@ async function fetchAllEmmaRows(table, orderBy = null) {
 }
 
 async function loadEmmaBackendState() {
-  const [profiles, charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows] = await Promise.all([
+  const [profiles, charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows, settingsRows] = await Promise.all([
     fetchAllEmmaRows('profiles'),
     fetchAllEmmaRows('characters'),
     fetchAllEmmaRows('chats'),
     fetchAllEmmaRows('messages', 'created_at'),
     fetchAllEmmaRows('character_reports'),
     fetchAllEmmaRows('character_applications'),
-    fetchAllEmmaRows('missions')
+    fetchAllEmmaRows('missions'),
+    fetchAllEmmaRows('app_settings')
   ]);
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
@@ -231,6 +234,8 @@ async function loadEmmaBackendState() {
   DB.set('users', users); DB.set('characters', characters); DB.set('chats', chats);
   DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
   DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
+  const plansSetting = settingsRows.find(x => x.key === 'thought_plans');
+  if (plansSetting?.value) { const config = cfg(); config.thoughtPlans = plansSetting.value; DB.set('config', config); }
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
   if (state.currentUser?.bannedUntil && Date.now() < state.currentUser.bannedUntil) {
@@ -959,31 +964,22 @@ function renderStoreTab(container) {
     '<div style="font-size:.75rem;color:var(--text-3);text-align:center">Somente moedas Emma. Sem dinheiro real.</div></div>';
 }
 
-function buyThoughtSubscription(period) {
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === state.currentUser.id);
-  if (!user) return toast('Usuário não encontrado.', 'error');
-  if (user.subscriptionRenewalBanned) return toast('Este usuário não pode renovar assinaturas. Contate um administrador.', 'error');
-  const p = cfg().thoughtPlans || { monthly: 500, yearly: 4500, promoEnabled: false, promoMonthly: 350, promoYearly: 3000 };
-  const price = Number(p.promoEnabled ? (period === 'monthly' ? p.promoMonthly : p.promoYearly) : (period === 'monthly' ? p.monthly : p.yearly));
-  if (!Number.isFinite(price) || price < 0) return toast('Preço inválido.', 'error');
-  if ((user.coins || 0) < price) return toast('Moedas insuficientes.', 'error');
-  const days = period === 'monthly' ? 30 : 365;
-  const now = Date.now();
-  const oldExpiry = user.thoughtSubscription ? Number(user.thoughtSubscription.expiresAt) || 0 : 0;
-  user.coins -= price;
-  user.thoughtSubscription = { plan: period, expiresAt: Math.max(now, oldExpiry) + days * 86400000, lastPurchaseAt: now };
-  user.thoughtSubscriptionHistory = user.thoughtSubscriptionHistory || [];
-  user.thoughtSubscriptionHistory.push({ plan: period, price: price, purchasedAt: now, expiresAt: user.thoughtSubscription.expiresAt });
-  DB.set('users', users); state.currentUser = user; updateCoinsDisplay();
-  syncMyProfileFromAppUser(user).catch(e => toast('Sincronização da assinatura pendente.', 'error'));
-  toast('Assinatura ativada!', 'success'); switchTab('store');
+async function buyThoughtSubscription(period) {
+  try {
+    await emmaApi('purchase_thought_subscription', {period});
+    await loadEmmaBackendState();
+    updateCoinsDisplay(); toast('Assinatura ativada e salva na sua conta!', 'success'); switchTab('store');
+  } catch(e) { toast(e.message || 'Não foi possível ativar a assinatura.', 'error'); }
 }
 
-function saveThoughtPlans() {
+async function saveThoughtPlans() {
   const c = cfg();
-  c.thoughtPlans = { monthly: Math.max(0, Number(el('plan-monthly').value) || 0), yearly: Math.max(0, Number(el('plan-yearly').value) || 0), oldMonthly: Math.max(0, Number(el('plan-old-monthly').value) || 0), oldYearly: Math.max(0, Number(el('plan-old-yearly').value) || 0), promoEnabled: el('plan-promo-enabled').checked, promoMonthly: Math.max(0, Number(el('plan-promo-monthly').value) || 0), promoYearly: Math.max(0, Number(el('plan-promo-yearly').value) || 0) };
-  DB.set('config', c); toast('Preços salvos!', 'success'); renderAdminPanel();
+  const plans = {monthly:Math.max(0,Number(el('plan-monthly').value)||0),yearly:Math.max(0,Number(el('plan-yearly').value)||0),oldMonthly:Math.max(0,Number(el('plan-old-monthly').value)||0),oldYearly:Math.max(0,Number(el('plan-old-yearly').value)||0),promoEnabled:el('plan-promo-enabled').checked,promoMonthly:Math.max(0,Number(el('plan-promo-monthly').value)||0),promoYearly:Math.max(0,Number(el('plan-promo-yearly').value)||0)};
+  try {
+    await emmaApi('admin_save_thought_plans', {plans});
+    c.thoughtPlans = plans; DB.set('config', c); toast('Preços salvos no Supabase!', 'success');
+    await loadEmmaBackendState(); renderAdminPanel();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 // ─── BOTTOM NAV / TABS ────────────────────────────────────────────────────────
