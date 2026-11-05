@@ -544,11 +544,6 @@ function renderAuthScreen() {
     el('auth-fields-register').classList.remove('hidden');
     el('auth-fields-register').innerHTML = `
       <div class="field">
-        <label>🔑 Código de convite</label>
-        <input type="text" class="input" id="auth-invite-code" placeholder="Digite seu código de convite" autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:1.5px">
-        <small style="color:var(--text-3)">Obrigatório para criar uma conta.</small>
-      </div>
-      <div class="field">
         <label>Você é…</label>
         <div class="chip-group" id="auth-usertype">
           <button type="button" class="chip-select active" data-val="player" onclick="selectChip(this,'auth-usertype')">🎮 Jogador</button>
@@ -626,21 +621,12 @@ function initAuth() {
     const users = DB.get('users', []);
 
     if (authMode === 'register') {
-      const config = cfg();
-      const inviteCode = (el('auth-invite-code')?.value || '').trim().toUpperCase();
-      const normalInvite = String(config.accessCode || '').trim().toUpperCase();
-      const adminInvite = String(config.adminCode || '').trim().toUpperCase();
-
-      if (!inviteCode) return toast('Digite seu código de convite.', 'error');
-      if (inviteCode !== normalInvite && inviteCode !== adminInvite)
-        return toast('Código de convite inválido.', 'error');
       if (users.find(u => (u.username || '').toLowerCase() === username.toLowerCase()))
         return toast('Usuário já existe.', 'error');
       if (password.length < 4) return toast('Senha muito curta.', 'error');
 
-      // Somente o código administrativo concede privilégios de administrador.
-      // O nome de usuário ou a senha, isoladamente, nunca promovem uma conta.
-      const isAdmin = inviteCode === adminInvite;
+      // O cadastro não concede privilégios administrativos pelo nome ou senha.
+      const isAdmin = false;
       const user = {
         id: 'u_' + Date.now(),
         username,
@@ -2138,8 +2124,10 @@ function logout() {
   DB.set('current_user', null);
   state.currentUser = null;
   state.currentChat = null;
-  showScreen('screen-auth');
-  renderAuthScreen();
+  DB.set('access_verified', false);
+  el('gate-code').value = '';
+  showScreen('screen-gate');
+  initGate();
 }
 
 // ─── TEXTAREA AUTO-RESIZE ─────────────────────────────────────────────────────
@@ -2164,7 +2152,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   initData();
 
   const userId = DB.get('current_user');
-  const accessVerified = DB.get('access_verified');
 
   try {
     if (userId) {
@@ -2174,9 +2161,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (user.bannedUntil && Date.now() < user.bannedUntil) {
           const days = Math.ceil((user.bannedUntil - Date.now()) / 86400000);
           DB.set('current_user', null);
-          showScreen('screen-auth');
-          renderAuthScreen();
-          initAuth();
+          DB.set('access_verified', false);
+          showScreen('screen-gate');
+          initGate();
           setTimeout(() => showBanModal(user.banReason || 'Violação dos termos', days), 500);
           return;
         }
@@ -2185,15 +2172,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
       }
     }
-    // No session — go to gate or auth
-    if (accessVerified) {
-      showScreen('screen-auth');
-      renderAuthScreen();
-      initAuth();
-    } else {
-      showScreen('screen-gate');
-      initGate();
-    }
+    // Sem sessão: sempre exigir o código de acesso antes de mostrar Entrar/Cadastrar.
+    DB.set('access_verified', false);
+    el('gate-code').value = '';
+    showScreen('screen-gate');
+    initGate();
   } catch(e) {
     console.error('Boot error:', e);
     // Fallback: show gate
