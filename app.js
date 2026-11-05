@@ -1769,7 +1769,7 @@ async function claimMission(missionId, event) {
     await loadEmmaBackendState();
     const rect = event.target.getBoundingClientRect();
     coinFly(result.reward, rect.left, rect.top);
-    toast(`+${result.reward}🪙 — ${mission.title} concluída!`, 'gold', 3000);
+    toast(`+${result.reward}🪙 — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
     updateCoinsDisplay(); switchTab('missions'); updateNavBadges();
   } catch(e) { toast(e.message || 'Não foi possível resgatar a missão.', 'error'); }
 }
@@ -1988,7 +1988,7 @@ function renderAdminPanel() {
         <div class="admin-row">
           <div style="font-size:1.2rem;width:30px;text-align:center">${m.icon}</div>
           <div class="admin-row-info">
-            <div class="admin-row-name">${m.title}</div>
+            <div class="admin-row-name">${escapeHtml(m.title)}</div>
             <div class="admin-row-sub">+${m.reward}🪙 · Meta: ${m.target} · ${m.type}</div>
           </div>
           <button class="btn btn-xs btn-danger" onclick="deleteMission('${m.id}')">🗑️</button>
