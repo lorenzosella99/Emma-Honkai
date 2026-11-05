@@ -183,7 +183,7 @@ async function loadEmmaBackendState() {
   const characters = (cr.data || []).map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', isBanned:!!c.is_banned,
-    ownerUserId:c.owner_user_id || null, isOnline:!!(c.owner_user_id && users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000)
+    ownerUserId:c.owner_user_id || null, isOnline:c.owner_user_id ? !!(users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000) : !!c.is_online
   }));
   const chats = (hr.data || []).map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, lastMessage:c.last_message || '',
@@ -1061,7 +1061,7 @@ function _renderCharsContent(pref) {
   const users = DB.get('users', []);
 
   // Apply gender filter to bots
-  let bots = chars.filter(c => !c.isBanned);
+  let bots = chars.filter(c => !c.isBanned && !c.ownerUserId);
   if (pref === 'female') bots = bots.filter(c => c.gender === 'female');
   else if (pref === 'male') bots = bots.filter(c => c.gender === 'male');
 
