@@ -43,7 +43,7 @@ async function emmaAuthRequest(action, payload) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Falha na autenticação.');
-  if (!data.session) throw new Error(data.error || 'Conta criada, mas não foi possível iniciar a sessão. Tente entrar novamente.');
+  if (!data.session && action !== 'validate_gate') throw new Error(data.error || 'Conta criada, mas não foi possível iniciar a sessão. Tente entrar novamente.');
   if (data.session) {
     const { error } = await emmaSupabase.auth.setSession({
       access_token: data.session.access_token,
@@ -107,11 +107,13 @@ async function fetchAllEmmaRows(table, orderBy = null) {
 }
 
 async function loadEmmaBackendState() {
-  const profileResult = state.currentUser?.isAdmin
-    ? await emmaApi('admin_list_profiles')
-    : await emmaSupabase.from('profiles').select('*').eq('id', state.currentUser.id);
-  if (profileResult.error) throw profileResult.error;
-  const profiles = state.currentUser?.isAdmin ? (profileResult.profiles || []) : (profileResult.data || []);
+  const sessionUserId = state.currentUser?.id || (await emmaSupabase.auth.getUser()).data.user?.id;
+  if (!sessionUserId) throw new Error('Sessão inválida.');
+  const ownProfileResult = await emmaSupabase.from('profiles').select('*').eq('id', sessionUserId).maybeSingle();
+  if (ownProfileResult.error || !ownProfileResult.data) throw (ownProfileResult.error || new Error('Perfil não encontrado.'));
+  const adminSession = state.currentUser?.isAdmin || ownProfileResult.data.role === 'admin';
+  const profileResult = adminSession ? await emmaApi('admin_list_profiles') : {data:[ownProfileResult.data]};
+  const profiles = adminSession ? (profileResult.profiles || []) : (profileResult.data || []);
   const [charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
     fetchAllEmmaRows('characters'),
     fetchAllEmmaRows('chats'),
