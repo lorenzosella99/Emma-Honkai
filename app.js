@@ -1154,7 +1154,7 @@ function renderChatScreen(char, chat) {
   img.src = char.image;
   img.alt = char.name;
   const chatScreen = el('screen-chat');
-  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', `url("${String(char.image || '').replace(/["\\\\]/g, '')}")`);
+  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', `url("${safeImageUrl(char.image || '')}")`);
 
   updateCostHints();
   loadMessages();
@@ -1234,7 +1234,9 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 function safeImageUrl(value) {
-  try { const u = new URL(String(value || ''), location.origin); return ['https:','http:'].includes(u.protocol) ? u.href : ''; }
+  const raw = String(value || '');
+  if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(raw)) return raw;
+  try { const u = new URL(raw, location.origin); return ['https:','http:'].includes(u.protocol) ? u.href : ''; }
   catch { return ''; }
 }
 
