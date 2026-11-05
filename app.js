@@ -1196,6 +1196,7 @@ async function openChat(charId) {
     const chats = DB.get('chats', []).filter(c => c.id !== chat.id);
     chats.push(chat); DB.set('chats', chats);
     state.currentChat.chatId = chat.id;
+    await emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chat.id);
     renderChatScreen(char, chat); showScreen('screen-chat');
   } catch(e) { toast(e.message || 'Não foi possível abrir a conversa.', 'error'); }
 }
@@ -1516,7 +1517,7 @@ function addMessage(msg) {
           created_at: new Date(msg.timestamp).toISOString()
         });
         if (error) throw error;
-        await emmaSupabase.from('chats').update({ last_message: msg.text.slice(0,60), last_time: new Date(msg.timestamp).toISOString() }).eq('id', msg.chatId);
+        await emmaSupabase.from('chats').update({ last_message: msg.text.slice(0,60), last_time: new Date(msg.timestamp).toISOString(), unread: 1 }).eq('id', msg.chatId);
       }
     } catch(e) { console.error('Message sync failed:', e); toast('Mensagem não sincronizada: ' + e.message, 'error'); }
   })();
@@ -1691,6 +1692,7 @@ async function replyAsCharacter(chatId) {
   const chat = DB.get('chats', []).find(c => c.id === chatId && c.charId === char.id);
   if (!chat) return toast('Conversa não encontrada.', 'error');
   state.currentChat = { charId: char.id, char, chatId, userId: chat.userId };
+  emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chatId);
   renderChatScreen(char, chat);
   el('chat-char-status').textContent = 'Você está respondendo como ' + char.name;
   showScreen('screen-chat');
