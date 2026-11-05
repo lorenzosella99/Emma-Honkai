@@ -360,7 +360,10 @@ function generateBotResponse(char, userMessage, history) {
 
   // Fala sempre existe
   const speeches = tone.speech[category] || tone.speech.default;
-  result.push({ type: 'speech', text: rand(speeches) });
+  // Consulta o histórico recente para evitar repetir literalmente as últimas falas do bot.
+  const recentBotLines = (history || []).filter(m => m.isBot || m.senderId === char.id).slice(-8).map(m => m.text);
+  const freshSpeeches = speeches.filter(line => !recentBotLines.includes(line));
+  result.push({ type: 'speech', text: rand(freshSpeeches.length ? freshSpeeches : speeches) });
 
   // Para mensagens longas do usuário, adiciona resposta extra
   if (msgLen > 80 && Math.random() > 0.5) {
@@ -1019,18 +1022,22 @@ function renderPlayerGrid(container, players) {
     container.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum jogador-personagem disponível</div>';
     return;
   }
+  const characters = DB.get('characters', []);
   container.innerHTML = players.map(u => {
-    const avatarSrc = u.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(u.username)}`;
+    const assigned = characters.find(c => c.ownerUserId === u.id);
+    const avatarSrc = assigned?.image || u.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(u.username)}`;
+    const displayName = assigned?.name || u.username;
     const genderIcon = u.gender === 'female' ? '♀' : u.gender === 'male' ? '♂' : '✦';
+    const online = !!(u.lastSeenAt && Date.now() - Number(u.lastSeenAt) < 60000);
     return `
-      <div class="char-card" onclick="openPlayerChat('${u.id}')">
+      <div class="char-card" onclick="${assigned ? `openChat('${assigned.id}')` : `openPlayerChat('${u.id}')`}">
         <div class="char-img-wrap">
-          <img src="${avatarSrc}" alt="${u.username}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'" style="object-fit:cover">
-          <div class="char-status-dot bot"></div>
+          <img src="${avatarSrc}" alt="${escapeHtml(displayName)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'" style="object-fit:cover">
+          <div class="char-status-dot ${online ? 'online' : 'bot'}"></div>
         </div>
         <div class="char-info">
-          <div class="char-name">${escapeHtml(u.username)}</div>
-          <div class="char-role">${genderIcon} Jogador</div>
+          <div class="char-name">${escapeHtml(displayName)}</div>
+          <div class="char-role">${genderIcon} ${assigned ? 'Personagem' : 'Jogador-personagem'}</div>
         </div>
       </div>
     `;
@@ -1389,7 +1396,7 @@ function addMessage(msg) {
   if (chat) {
     chat.lastMessage = msg.text.substring(0, 60);
     chat.lastTime = msg.timestamp;
-    if (msg.isBot) chat.unread = (chat.unread || 0) + 1;
+    if (msg.isBot || msg.senderId !== chat.userId) chat.unread = (chat.unread || 0) + 1;
     DB.set('chats', chats);
   }
 
