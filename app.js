@@ -27,9 +27,26 @@ function ghSetToken(tok) {
   try { localStorage.setItem('emma_gh_token', tok); } catch {}
 }
 
-// Busca arquivo do GitHub (raw, sem autenticação — funciona em repos públicos)
+// Busca arquivo do GitHub. Usa a API autenticada quando há token
+// (necessário porque o repositório de dados é privado); sem token, tenta raw.
 async function ghFetch(filename) {
   try {
+    const token = ghToken();
+    if (token) {
+      const apiRes = await fetch(`${API_BASE}/${filename}`, {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github.v3+json'
+        }
+      });
+      if (apiRes.ok) {
+        const file = await apiRes.json();
+        if (file.sha) _ghSHAs[filename] = file.sha;
+        const decoded = decodeURIComponent(escape(atob((file.content || '').replace(/\\s/g, ''))));
+        return JSON.parse(decoded);
+      }
+    }
+
     const url = `${RAW_BASE}/${filename}?t=${Date.now()}`;
     const res = await fetch(url);
     if (!res.ok) return null;
