@@ -251,7 +251,12 @@ async function refreshEmmaBackendState() {
     }
     if (state.currentTab === 'profile') switchTab('profile');
     if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden')) renderAdminPanel();
-  } catch (e) { console.warn('Emma sync:', e); }
+  } catch (e) {
+    if (!state.currentUser && /suspensa|suspenso/i.test(e.message || '')) {
+      toast(e.message, 'error', 8000);
+      authMode = 'login'; renderAuthScreen(); showScreen('screen-auth');
+    } else console.warn('Emma sync:', e);
+  }
 }
 
 function subscribeEmmaRealtime() {
