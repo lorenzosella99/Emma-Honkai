@@ -527,6 +527,11 @@ function renderAuthScreen() {
     el('auth-fields-register').classList.remove('hidden');
     el('auth-fields-register').innerHTML = `
       <div class="field">
+        <label>🔑 Código de convite</label>
+        <input type="text" class="input" id="auth-invite-code" placeholder="Digite seu código de convite" autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:1.5px">
+        <small style="color:var(--text-3)">Obrigatório para criar uma conta.</small>
+      </div>
+      <div class="field">
         <label>Você é…</label>
         <div class="chip-group" id="auth-usertype">
           <button type="button" class="chip-select active" data-val="player" onclick="selectChip(this,'auth-usertype')">🎮 Jogador</button>
@@ -604,11 +609,21 @@ function initAuth() {
     const users = DB.get('users', []);
 
     if (authMode === 'register') {
-      if (users.find(u => u.username.toLowerCase() === username.toLowerCase()))
+      const config = cfg();
+      const inviteCode = (el('auth-invite-code')?.value || '').trim().toUpperCase();
+      const normalInvite = String(config.accessCode || '').trim().toUpperCase();
+      const adminInvite = String(config.adminCode || '').trim().toUpperCase();
+
+      if (!inviteCode) return toast('Digite seu código de convite.', 'error');
+      if (inviteCode !== normalInvite && inviteCode !== adminInvite)
+        return toast('Código de convite inválido.', 'error');
+      if (users.find(u => (u.username || '').toLowerCase() === username.toLowerCase()))
         return toast('Usuário já existe.', 'error');
       if (password.length < 4) return toast('Senha muito curta.', 'error');
 
-      const isAdmin = password === cfg().adminCode || username.toLowerCase().includes('admin');
+      // Somente o código administrativo concede privilégios de administrador.
+      // O nome de usuário ou a senha, isoladamente, nunca promovem uma conta.
+      const isAdmin = inviteCode === adminInvite;
       const user = {
         id: 'u_' + Date.now(),
         username,
