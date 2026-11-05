@@ -151,9 +151,7 @@ async function emmaApi(action, payload = {}) {
 async function syncMyProfileFromAppUser(user) {
   if (!user || user.id !== state.currentUser?.id) return;
   return emmaApi('sync_my_profile', {
-    coins:user.coins, totalMessages:user.totalMessages, thoughtsBought:user.thoughtsBought,
-    uniqueCharsContacted:user.uniqueCharsContacted || [], missionProgress:user.missionProgress || {},
-    completedMissions:user.completedMissions || [], gender:user.gender || 'other',
+    coins:user.coins, gender:user.gender || 'other',
     chatPreference:user.chatPreference || 'both', avatar:user.avatar || null,
     allowBotTakeover:!!user.allowBotTakeover
   });
@@ -1380,7 +1378,6 @@ async function sendMessage() {
   if (!user.uniqueCharsContacted.includes(state.currentChat.charId)) {
     user.uniqueCharsContacted.push(state.currentChat.charId);
   }
-  if (type === 'thought') user.thoughtsBought = (user.thoughtsBought || 0) + 1;
   DB.set('users', users);
   state.currentUser = user;
   syncMyProfileFromAppUser(user).catch(e => console.warn('Perfil não sincronizado:', e.message));
