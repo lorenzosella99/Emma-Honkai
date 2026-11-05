@@ -131,6 +131,7 @@ const DEFAULT_CONFIG = {
   accessCode: 'EMMA2024',
   adminCode: 'ADMIN_EMMA99',
   thoughtCost: 10,
+  thoughtPlans: { monthly: 500, yearly: 4500, oldMonthly: 650, oldYearly: 5500, promoEnabled: false, promoMonthly: 350, promoYearly: 3000 },
   actionCost: 5,
   speechCost: 0,
   startingCoins: 150,
@@ -802,6 +803,47 @@ function updateCoinsDisplay() {
   }
 }
 
+function renderStoreTab(container) {
+  const users = DB.get('users', []);
+  const user = users.find(u => u.id === state.currentUser.id) || state.currentUser;
+  const config = cfg();
+  const p = config.thoughtPlans || { monthly: 500, yearly: 4500, oldMonthly: 650, oldYearly: 5500, promoMonthly: 350, promoYearly: 3000, promoEnabled: false };
+  const active = user.thoughtSubscription && user.thoughtSubscription.expiresAt > Date.now();
+  const monthly = p.promoEnabled ? p.promoMonthly : p.monthly;
+  const yearly = p.promoEnabled ? p.promoYearly : p.yearly;
+  container.innerHTML = '<div class="app-header"><div class="header-title">Loja de Pensamentos</div><div class="header-coins">🪙 <span class="coins-display">' + user.coins + '</span></div></div>' +
+    '<div style="padding:16px;padding-bottom:calc(var(--nav-h) + 16px)">' +
+    '<div class="admin-section" style="padding:16px"><b>' + (active ? 'Assinatura ativa' : 'Sem assinatura ativa') + '</b><div style="font-size:.85rem;margin-top:6px">' + (active ? 'Válida até ' + new Date(user.thoughtSubscription.expiresAt).toLocaleString('pt-BR') : 'Assine para comprar novos pensamentos.') + '</div><div style="font-size:.78rem;color:var(--text-3);margin-top:8px">Pensamentos já desbloqueados continuam disponíveis após a expiração.</div></div>' +
+    '<div class="admin-section" style="padding:16px"><b>Plano mensal</b><div style="font-size:1.4rem;margin:10px 0">🪙 ' + Number(monthly).toLocaleString('pt-BR') + '</div>' + (p.promoEnabled && p.oldMonthly > monthly ? '<del>Antes: ' + p.oldMonthly + '</del><div>Promoção ativa</div>' : '') + '<button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'monthly\')">Assinar por 30 dias</button></div>' +
+    '<div class="admin-section" style="padding:16px"><b>Plano anual</b><div style="font-size:1.4rem;margin:10px 0">🪙 ' + Number(yearly).toLocaleString('pt-BR') + '</div>' + (p.promoEnabled && p.oldYearly > yearly ? '<del>Antes: ' + p.oldYearly + '</del><div>Promoção ativa</div>' : '') + '<button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'yearly\')">Assinar por 365 dias</button></div>' +
+    '<div style="font-size:.75rem;color:var(--text-3);text-align:center">Somente moedas Emma. Sem dinheiro real.</div></div>';
+}
+
+function buyThoughtSubscription(period) {
+  const users = DB.get('users', []);
+  const user = users.find(u => u.id === state.currentUser.id);
+  if (!user) return toast('Usuário não encontrado.', 'error');
+  const p = cfg().thoughtPlans || { monthly: 500, yearly: 4500, promoEnabled: false, promoMonthly: 350, promoYearly: 3000 };
+  const price = Number(p.promoEnabled ? (period === 'monthly' ? p.promoMonthly : p.promoYearly) : (period === 'monthly' ? p.monthly : p.yearly));
+  if (!Number.isFinite(price) || price < 0) return toast('Preço inválido.', 'error');
+  if ((user.coins || 0) < price) return toast('Moedas insuficientes.', 'error');
+  const days = period === 'monthly' ? 30 : 365;
+  const now = Date.now();
+  const oldExpiry = user.thoughtSubscription ? Number(user.thoughtSubscription.expiresAt) || 0 : 0;
+  user.coins -= price;
+  user.thoughtSubscription = { plan: period, expiresAt: Math.max(now, oldExpiry) + days * 86400000, lastPurchaseAt: now };
+  user.thoughtSubscriptionHistory = user.thoughtSubscriptionHistory || [];
+  user.thoughtSubscriptionHistory.push({ plan: period, price: price, purchasedAt: now, expiresAt: user.thoughtSubscription.expiresAt });
+  DB.set('users', users); state.currentUser = user; updateCoinsDisplay();
+  toast('Assinatura ativada!', 'success'); switchTab('store');
+}
+
+function saveThoughtPlans() {
+  const c = cfg();
+  c.thoughtPlans = { monthly: Math.max(0, Number(el('plan-monthly').value) || 0), yearly: Math.max(0, Number(el('plan-yearly').value) || 0), oldMonthly: Math.max(0, Number(el('plan-old-monthly').value) || 0), oldYearly: Math.max(0, Number(el('plan-old-yearly').value) || 0), promoEnabled: el('plan-promo-enabled').checked, promoMonthly: Math.max(0, Number(el('plan-promo-monthly').value) || 0), promoYearly: Math.max(0, Number(el('plan-promo-yearly').value) || 0) };
+  DB.set('config', c); toast('Preços salvos!', 'success'); renderAdminPanel();
+}
+
 // ─── BOTTOM NAV / TABS ────────────────────────────────────────────────────────
 function switchTab(tab) {
   state.currentTab = tab;
@@ -814,6 +856,7 @@ function switchTab(tab) {
   if (tab === 'chars') renderCharsTab(content);
   else if (tab === 'profile') renderProfileTab(content);
   else if (tab === 'missions') renderMissionsTab(content);
+  else if (tab === 'store') renderStoreTab(content);
 
   updateNavBadges();
 }
@@ -1306,6 +1349,7 @@ function unlockThought(btn, msgId) {
   const users = DB.get('users', []);
   const user = users.find(u => u.id === state.currentUser.id);
 
+  if (!user.thoughtSubscription || Number(user.thoughtSubscription.expiresAt) <= Date.now()) return toast('Assinatura expirada. Renove na Loja para comprar novos pensamentos.', 'error');
   if (user.coins < cost) return toast(`Sem moedas! Precisa de ${cost}🪙`, 'error');
 
   user.coins -= cost;
