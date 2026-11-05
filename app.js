@@ -2420,6 +2420,7 @@ async function logout() {
   state.currentUser = null;
   state.currentChat = null;
   DB.set('access_verified', false);
+  sessionStorage.removeItem('emma_invite_code');
   gateAdminAccess = false;
   el('gate-code').value = '';
   showScreen('screen-gate');
