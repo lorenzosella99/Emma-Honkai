@@ -1183,3 +1183,13 @@ img { display: block; }
 .legal-link-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:rgba(139,92,246,.16);color:#d8b4fe;font-size:1.2rem}.legal-link-card span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:4px}.legal-link-card b{font-size:.86rem}.legal-link-card small{font-size:.72rem;color:var(--text-3)}.legal-link-arrow{color:#c4a2ff}
 .legal-check{display:flex;align-items:flex-start;gap:10px;margin:17px 2px;color:var(--text-2);font-size:.82rem;line-height:1.5;cursor:pointer}.legal-check input{width:17px;height:17px;margin:1px 0 0;accent-color:#a78bfa;flex:none}.legal-check b{color:var(--text-1)}.legal-continue{margin-top:8px;min-height:46px}.legal-renewal{margin:14px 0 0;text-align:center;color:var(--text-3);font-size:.68rem;line-height:1.55}
 @media(max-width:420px){.legal-card{padding:23px 18px}.legal-brand small{font-size:.5rem;letter-spacing:.7px}}
+
+
+/* Skeletons da conversa: placeholders animados enquanto o backend prepara o chat. */
+.chat-skeleton-list { display:flex; flex-direction:column; gap:18px; padding:18px 14px; }
+.chat-skeleton-row { display:flex; align-items:flex-end; gap:9px; max-width:84%; }
+.chat-skeleton-row.user { align-self:flex-end; justify-content:flex-end; }
+.chat-skeleton-bubble { display:flex; flex-direction:column; gap:9px; width:min(230px,62vw); padding:14px; border:1px solid var(--border); border-radius:18px; background:var(--bg-2); }
+.chat-skeleton-row.user .chat-skeleton-bubble { background:var(--bg-3); }
+.chat-skeleton-bubble .skel-line { height:11px; }
+.chat-skeleton-bubble .skel-line-sm { height:9px; }
