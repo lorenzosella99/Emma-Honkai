@@ -2048,7 +2048,7 @@ async function confirmAdminDeleteUser(userId, button) {
     button.closest('.modal-overlay')?.remove();
     await loadEmmaBackendState();
     toast('Conta e dados vinculados excluídos.', 'success');
-    adminViewAllChats();
+    renderAdminPanel();
   } catch (e) {
     button.disabled = false;
     button.textContent = 'Excluir definitivamente';
@@ -2144,6 +2144,7 @@ function renderAdminPanel() {
               : `<button class="btn btn-sm btn-danger" onclick="showBanCharModal('${c.id}')">Banir</button>`
             }
             <button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="showAdminDeleteCharacterModal('${c.id}')" title="Excluir personagem">🗑️</button>
           </div>
         </div>
       `).join('')}
@@ -2172,6 +2173,7 @@ function renderAdminPanel() {
               : `<button class="btn btn-xs btn-danger" onclick="adminSetSubscriptionBan('${u.id}', true)">Bloquear renovação</button>`
             }
             <button class="btn btn-xs btn-secondary" onclick="adminViewUserChats('${u.id}')">Ver chats</button>
+            ${u.id !== state.currentUser.id ? `<button class="btn btn-xs btn-danger" onclick="showAdminDeleteUserModal('${u.id}')" title="Excluir usuário">🗑️ Excluir</button>` : ''}
             ${u.bannedUntil && Date.now() < u.bannedUntil
               ? `<button class="btn btn-xs btn-secondary" onclick="unbanUser('${u.id}')">Desbanir</button>`
               : u.id !== state.currentUser.id
@@ -2223,6 +2225,36 @@ function renderAdminPanel() {
       row.classList.toggle('hidden', !row.dataset.adminUser.includes(query));
     });
   });
+}
+
+function showAdminDeleteCharacterModal(characterId) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const character = DB.get('characters', []).find(c => c.id === characterId);
+  if (!character) return toast('Personagem não encontrado. Atualize a lista.', 'error');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal-sheet"><div class="modal-handle"></div><div class="modal-title">⚠️ Excluir personagem permanentemente</div><div class="modal-body">Personagem: <b>' + escapeHtml(character.name) + '</b><br>Esta ação remove o personagem, libera usuários que o tinham atribuído e exclui conversas e mensagens vinculadas a ele. Não pode ser desfeita.<br><br>Digite exatamente o nome do personagem para confirmar.</div><input class="input" id="admin-delete-character-name" autocomplete="off" placeholder="' + escapeHtml(character.name) + '"><div class="modal-actions"><button class="btn btn-secondary flex-1" onclick="this.closest(\'.modal-overlay\').remove()">Cancelar</button><button class="btn btn-danger flex-1" onclick="confirmAdminDeleteCharacter(\'' + character.id + '\', this)">Excluir definitivamente</button></div></div>';
+  document.body.appendChild(overlay);
+}
+
+async function confirmAdminDeleteCharacter(characterId, button) {
+  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  const character = DB.get('characters', []).find(c => c.id === characterId);
+  const typed = el('admin-delete-character-name')?.value?.trim().toLocaleLowerCase('pt-BR');
+  if (!character || typed !== String(character.name || '').trim().toLocaleLowerCase('pt-BR')) return toast('O nome digitado não corresponde ao personagem.', 'error');
+  button.disabled = true;
+  button.textContent = 'Excluindo…';
+  try {
+    await emmaApi('admin_delete_character', {characterId, expectedName:character.name});
+    button.closest('.modal-overlay')?.remove();
+    await loadEmmaBackendState();
+    toast('Personagem e conversas vinculadas excluídos.', 'success');
+    renderAdminPanel();
+  } catch (e) {
+    button.disabled = false;
+    button.textContent = 'Excluir definitivamente';
+    toast(e.message || 'Não foi possível excluir o personagem.', 'error');
+  }
 }
 
 async function adminSetUserRole(userId, role) {
