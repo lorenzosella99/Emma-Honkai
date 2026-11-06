@@ -1134,7 +1134,7 @@ function renderCharsTab(container) {
     </div>
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
-      <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
+      <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter!=='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
       <div class="section-title">🤖 Bots Online</div>
       <div class="chars-grid" id="chars-grid-bots-online">
         ${Array(2).fill(skeletonCard).join('')}
@@ -1163,7 +1163,7 @@ function setCharPref(pref) {
   switchTab('chars');
 }
 
-function setCharacterFilter(filter) { state.characterFilter=filter==="vip"?"vip":"normal"; renderCharsTab(el("screen-main-content")||el("screen-main")); }
+function setCharacterFilter(filter) { state.characterFilter=filter==="vip"?"vip":"normal"; switchTab("chars"); }
 
 function _renderCharsContent(pref) {
   const chars = DB.get('characters', []);
@@ -2068,7 +2068,7 @@ function renderMissionCard(mission, user, done = false) {
         <div class="mission-progress-bar">
           <div class="mission-progress-fill" style="width:${pct}%"></div>
         </div>
-        <div style="font-size:.7rem;color:var(--text-3);margin-top:3px">${progress}/${mission.target}</div>
+        <div style="font-size:.7rem;color:var(--text-3);margin-top:3px">${progress}/${mission.target} · +${mission.xpReward||0} XP</div>
       </div>
       ${done ? `<span style="font-size:1.3rem">✅</span>` :
         canClaim ? `<button class="mission-claim-btn" onclick="claimMission('${mission.id}', event)">+${mission.reward}🪙</button>` :
@@ -2086,7 +2086,7 @@ async function claimMission(missionId, event) {
     await loadEmmaBackendState();
     const rect = event.target.getBoundingClientRect();
     coinFly(result.reward, rect.left, rect.top);
-    toast(`+${result.reward}🪙 — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
+    toast(`+${result.reward}🪙 +${result.xpReward||0} XP — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
     updateCoinsDisplay(); switchTab('missions'); updateNavBadges();
   } catch(e) { toast(e.message || 'Não foi possível resgatar a missão.', 'error'); }
 }
