@@ -167,7 +167,7 @@ async function loadEmmaBackendState() {
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
-    gender:c.gender || 'other', botPersonality:c.bot_personality || '', isBanned:!!c.is_banned,
+    gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:c.owner_user_id ? !!(users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000) : !!c.is_online
   }));
@@ -2067,7 +2067,7 @@ function renderAdminPanel() {
   container.innerHTML = `
     <div class="admin-section">
       <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
-      ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => !c.ownerUserId || c.ownerUserId === u.id).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button><button class="btn btn-secondary btn-sm" onclick="adminRejectCharacterRequest('${u.id}')">Recusar</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
+      ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => c.controlMode !== 'bot' && (!c.ownerUserId || c.ownerUserId === u.id)).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button><button class="btn btn-secondary btn-sm" onclick="adminRejectCharacterRequest('${u.id}')">Recusar</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
     </div>
     <div class="admin-section"><div class="admin-section-header">🚨 Denúncias pendentes (${pendingReports.length})</div>
       ${pendingReports.map(r => { const reporter=users.find(u=>u.id===r.reporterId), target=users.find(u=>u.id===r.reportedUserId), c=chars.find(x=>x.id===r.characterId); return `<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>${escapeHtml(target?.username || 'Usuário removido')}</b><div class="admin-row-sub">Denunciado por ${escapeHtml(reporter?.username || 'Personagem')} em ${escapeHtml(c?.name || 'personagem')}</div><div class="admin-row-sub">${escapeHtml(r.reason)}</div></div><button class="btn btn-secondary btn-sm" onclick="adminResolveReport('${r.id}','reviewed')">Analisada</button></div>`; }).join('') || '<div class="admin-row-sub">Nenhuma denúncia pendente.</div>'}
@@ -2433,6 +2433,7 @@ function showAddCharModal(editId = null) {
         </div>
       </div>
       <div class="field"><label>Descrição</label><input class="input" id="cf-desc" value="${escapeHtml(char?.description||'')}"></div>
+      <div class="field"><label>Quem pode controlar este personagem?</label><select class="input" id="cf-control-mode"><option value="bot" ${char?.controlMode==='bot'?'selected':''}>Somente bot</option><option value="both" ${(!char?.controlMode||char?.controlMode==='both')?'selected':''}>Ambos (bot e usuários)</option><option value="users" ${char?.controlMode==='users'?'selected':''}>Somente usuários</option></select></div>
       <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${escapeHtml(char?.botPersonality||'')}</textarea></div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
@@ -2479,6 +2480,7 @@ async function saveChar(editId, btn) {
   const chars = DB.get('characters', []);
   const image = el('cf-image').value.trim();
   const gender = getChipVal('cf-gender', 'other');
+  const controlMode = ['bot','both','users'].includes(el('cf-control-mode')?.value) ? el('cf-control-mode').value : 'both';
 
   if (editId) {
     const char = chars.find(c => c.id === editId);
@@ -2489,6 +2491,7 @@ async function saveChar(editId, btn) {
       char.description = el('cf-desc').value.trim();
       char.botPersonality = el('cf-personality').value.trim();
       char.gender = gender;
+      char.controlMode = controlMode;
     }
   } else {
     chars.push({
@@ -2499,6 +2502,7 @@ async function saveChar(editId, btn) {
       description: el('cf-desc').value.trim(),
       botPersonality: el('cf-personality').value.trim(),
       gender,
+      controlMode,
       isOnline: false,
       isBanned: false,
       banUntil: null,
