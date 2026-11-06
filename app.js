@@ -1583,7 +1583,23 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
       ordered = [{ type: 'speech', text: generatedText }];
     } catch (aiError) {
       console.warn('IA online indisponível; usando resposta local temporária:', aiError);
-      toast('IA online indisponível. Resposta alternativa ativada: ' + (aiError.message || 'erro'), 'warning');
+      const aiErrorText = 'Erro na IA: ' + String(aiError?.message || aiError || 'erro desconhecido');
+      console.error('[Emma IA]', aiError);
+      const errorBox = document.createElement('div');
+      errorBox.className = 'toast error';
+      errorBox.style.cssText = 'position:fixed;z-index:99999;left:12px;right:12px;bottom:calc(var(--nav-h, 64px) + 18px);max-width:620px;margin:auto;display:flex;gap:10px;align-items:flex-start;box-shadow:0 8px 30px #0008;white-space:normal;overflow-wrap:anywhere;';
+      const errorText = document.createElement('span');
+      errorText.textContent = aiErrorText;
+      const copyError = document.createElement('button');
+      copyError.type = 'button'; copyError.textContent = 'Copiar';
+      copyError.className = 'btn btn-sm';
+      copyError.onclick = () => { if (navigator.clipboard?.writeText) navigator.clipboard.writeText(aiErrorText).then(() => { copyError.textContent = 'Copiado!'; }).catch(() => { copyError.textContent = 'Selecione o texto'; }); };
+      const closeError = document.createElement('button');
+      closeError.type = 'button'; closeError.textContent = '×'; closeError.className = 'btn btn-sm';
+      closeError.onclick = () => errorBox.remove();
+      errorBox.append(errorText, copyError, closeError);
+      document.body.appendChild(errorBox);
+      toast('A IA falhou; uma resposta alternativa foi usada.', 'error', 6000);
       let localResponses = [];
       try { localResponses = generateBotResponse(char, userText, chatHistory, isPremiumActive()) || []; }
       catch (generationError) { console.error('Falha na biblioteca local:', generationError); }
