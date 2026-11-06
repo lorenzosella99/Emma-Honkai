@@ -1575,21 +1575,22 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
     const chatHistory = DB.get('messages', {})[activeChat.chatId] || [];
     const lastUserMsg = [...chatHistory].reverse().find(m => m.senderId === state.currentUser?.id);
     const userText = lastUserMsg?.text || '';
-    let responses;
+    let ordered;
     try {
-      responses = generateBotResponse(char, userText, chatHistory, isPremiumActive()) || [];
-    } catch (generationError) {
-      console.error('Falha na biblioteca de respostas:', generationError);
-      responses = [];
+      const aiReply = await emmaApi('generate_character_reply', { chatId: activeChat.chatId });
+      const generatedText = String(aiReply?.text || '').trim();
+      if (!generatedText) throw new Error('A IA retornou uma resposta vazia.');
+      ordered = [{ type: 'speech', text: generatedText }];
+    } catch (aiError) {
+      console.warn('IA online indisponível; usando resposta local temporária:', aiError);
+      toast('IA online indisponível. Resposta alternativa ativada: ' + (aiError.message || 'erro'), 'warning');
+      let localResponses = [];
+      try { localResponses = generateBotResponse(char, userText, chatHistory, isPremiumActive()) || []; }
+      catch (generationError) { console.error('Falha na biblioteca local:', generationError); }
+      let speech = localResponses.find(r => r?.type === 'speech' && String(r.text || '').trim());
+      if (!speech) speech = { type: 'speech', text: 'Estou aqui. Pode continuar, quero ouvir você.' };
+      ordered = [speech, ...localResponses.filter(r => r !== speech && ['action','thought'].includes(r?.type))];
     }
-
-    // A fala é obrigatória e vem primeiro; pensamentos/ações nunca podem impedir a resposta principal.
-    let speech = responses.find(r => r?.type === 'speech' && String(r.text || '').trim());
-    if (!speech) {
-      const fallback = ['Estou aqui. Pode continuar, quero ouvir você.', 'Entendi. Me conta um pouco mais sobre isso.', 'Interessante... quero saber o que você pensa sobre isso.'];
-      speech = { type: 'speech', text: fallback[Math.floor(Math.random() * fallback.length)] };
-    }
-    const ordered = [speech, ...responses.filter(r => r !== speech && ['action','thought'].includes(r?.type))];
     const container = el('chat-messages');
 
     for (let i = 0; i < ordered.length; i++) {
