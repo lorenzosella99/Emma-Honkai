@@ -2074,7 +2074,7 @@ function renderMissionCard(mission, user, done = false) {
         <div class="mission-progress-bar">
           <div class="mission-progress-fill" style="width:${pct}%"></div>
         </div>
-        <div style="font-size:.7rem;color:var(--text-3);margin-top:3px">${progress}/${mission.target} · +${mission.xpReward||0} XP</div>
+        <div style="font-size:.7rem;color:var(--text-3);margin-top:3px">${progress}/${mission.target}${user.userType === "character" && mission.xpReward ? ` · +${mission.xpReward} XP` : ""}</div>
       </div>
       ${done ? `<span style="font-size:1.3rem">✅</span>` :
         canClaim ? `<button class="mission-claim-btn" onclick="claimMission('${mission.id}', event)">+${mission.reward}🪙</button>` :
@@ -2092,7 +2092,7 @@ async function claimMission(missionId, event) {
     await loadEmmaBackendState();
     const rect = event.target.getBoundingClientRect();
     coinFly(result.reward, rect.left, rect.top);
-    toast(`+${result.reward}🪙 +${result.xpReward||0} XP — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
+    toast(`+${result.reward}🪙${result.xpReward ? ` +${result.xpReward} XP` : ""} — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
     if(result.premiumReward)toast("Nível 99 alcançado! Você recebeu 5 dias de Emma Premium grátis.","gold",5000);
     updateCoinsDisplay(); switchTab('missions'); updateNavBadges();
   } catch(e) { toast(e.message || 'Não foi possível resgatar a missão.', 'error'); }
