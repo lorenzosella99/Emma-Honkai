@@ -165,7 +165,7 @@ function profileToAppUser(p) {
     userType: p.user_type || 'player', gender: p.gender || 'other',
     chatPreference: p.chat_preference || 'both', avatar: p.avatar || null,
     allowBotTakeover: !!p.allow_bot_takeover, isAnonymous:!!p.is_anonymous,
-    creatorLevel:Number(p.creator_level||1),creatorXp:Number(p.creator_xp||0),creatorDailyMessages:Number(p.creator_daily_messages||0),creatorWeeklyMessages:Number(p.creator_weekly_messages||0),creatorLevel99RewardClaimed:!!p.creator_level99_reward_claimed,
+    creatorLevel:Number(p.creator_level||1),creatorXp:Number(p.creator_xp||0),creatorDailyMessages:Number(p.creator_daily_messages||0),creatorDailyDate:p.creator_daily_date||null,creatorWeeklyMessages:Number(p.creator_weekly_messages||0),creatorWeekStart:p.creator_week_start||null,creatorLevel99RewardClaimed:!!p.creator_level99_reward_claimed,
     assignedCharacterId: p.assigned_character_id || null,
     characterRequest: { status: p.character_request_status || 'none', requestedAt: p.character_request_at ? Date.parse(p.character_request_at) : null },
     joinDate: p.created_at ? Date.parse(p.created_at) : Date.now(),
@@ -1731,6 +1731,12 @@ function renderProfileTab(container) {
   const chars = user.uniqueCharsContacted?.length || 0;
   const avatarSrc = safeImageUrl(user.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(user.username)}`);
   const genderLabel = user.gender === 'female' ? '♀ Mulher' : user.gender === 'male' ? '♂ Homem' : '✦ Outro';
+  const brToday=new Intl.DateTimeFormat("sv-SE",{timeZone:"America/Sao_Paulo"}).format(new Date());
+  const brNow=new Date(new Date().toLocaleString("en-US",{timeZone:"America/Sao_Paulo"}));
+  brNow.setHours(0,0,0,0);brNow.setDate(brNow.getDate()-((brNow.getDay()+6)%7));
+  const brWeekStart=new Intl.DateTimeFormat("sv-SE",{timeZone:"America/Sao_Paulo"}).format(brNow);
+  const dailyCreatorMessages=user.creatorDailyDate===brToday?Number(user.creatorDailyMessages||0):0;
+  const weeklyCreatorMessages=user.creatorWeekStart===brWeekStart?Number(user.creatorWeeklyMessages||0):0;
   const typeLabel = user.userType === 'character' ? '🌟 Personagem' : '🎮 Jogador';
   const prefLabel = { both:'👥 Todos', bots:'🤖 Só Bots', female:'♀ Mulheres', male:'♂ Homens' }[user.chatPreference || 'both'];
 
@@ -1789,7 +1795,7 @@ function renderProfileTab(container) {
             ? '<div class="admin-row-sub" style="margin:8px 0">Sua solicitação anterior não foi aprovada. Você pode solicitar novamente.</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar novamente</button>'
             : '<div class="admin-row-sub" style="margin:8px 0">Quer interpretar um personagem e conversar com outros jogadores?</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Quero ser um personagem</button>'}
       </div>
-      ${user.userType === "character" || assignedChar ? `<div class="admin-section creator-level-card" style="margin:14px 16px;padding:16px"><b>🏆 Nível do criador</b><div class="creator-level-number">Nível ${Number(user.creatorLevel||1)} / 99</div><div class="creator-level-track"><div style="width:${Number(user.creatorLevel)>=99?100:Math.max(0,Math.min(100,(Number(user.creatorXp||0)/(100*Number(user.creatorLevel||1)*(Number(user.creatorLevel||1)+1)/2))*100))}%"></div></div><div class="admin-row-sub">${Number(user.creatorXp||0).toLocaleString("pt-BR")} XP · Hoje ${Number(user.creatorDailyMessages||0)}/100 mensagens (+500 XP) · Semana ${Number(user.creatorWeeklyMessages||0)}/2.000 (+1.850 XP)</div>${Number(user.creatorLevel)>=99?(user.creatorLevel99RewardClaimed?'<span class="chip chip-gold">Premium de nível 99 resgatado</span>':'<span class="chip chip-gold">Nível máximo alcançado</span>'):""}</div>` : ""}
+      ${user.userType === "character" || assignedChar ? `<div class="admin-section creator-level-card" style="margin:14px 16px;padding:16px"><b>🏆 Nível do criador</b><div class="creator-level-number">Nível ${Number(user.creatorLevel||1)} / 99</div><div class="creator-level-track"><div style="width:${Number(user.creatorLevel)>=99?100:Math.max(0,Math.min(100,((Number(user.creatorXp||0)-100*(Number(user.creatorLevel||1)-1)*Number(user.creatorLevel||1)/2)/(100*Number(user.creatorLevel||1)))*100))}%"></div></div><div class="admin-row-sub">${Number(user.creatorXp||0).toLocaleString("pt-BR")} XP · Hoje ${dailyCreatorMessages}/100 mensagens (+500 XP) · Semana ${weeklyCreatorMessages}/2.000 (+1.850 XP)</div>${Number(user.creatorLevel)>=99?(user.creatorLevel99RewardClaimed?'<span class="chip chip-gold">Premium de nível 99 resgatado</span>':'<span class="chip chip-gold">Nível máximo alcançado</span>'):""}</div>` : ""}
       <div class="admin-section" style="margin:14px 16px;padding:16px">
         <b>📥 Importar histórico do Discord</b>
         <div class="admin-row-sub" style="margin:8px 0">Cole uma conversa antiga, associe cada participante aos personagens e importe no chat privado.</div>
