@@ -1598,13 +1598,25 @@ let discordImportDraft=null;
 function parseDiscordHistory(raw){
  const lines=String(raw||'').replace(/\r/g,'').split('\n');const out=[];let cur=null;
  const pats=[/^\[[^\]]+\]\s*([^:]{1,100}):\s*(.*)$/,/^\d{4}-\d{2}-\d{2}[^-]*-\s*([^:]{1,100}):\s*(.*)$/,/^(?:\[[^\]]+\]\s*)?([^:]{1,80}):\s+(.*)$/];
- for(const line of lines){const m=pats.map(p=>line.match(p)).find(Boolean);if(m){if(cur)out.push(cur);cur={speaker:m[1].trim(),text:m[2].trim()};}else if(cur&&line.trim())cur.text+='\n'+line.trim();}
+ for(const line of lines){
+  const heading=line.match(/^###\s*(.*?)\s*(\d{1,2}\/\d{1,2}\/\d{4},\s*\d{1,2}:\d{2})\s*$/);
+  if(heading){if(cur)out.push(cur);cur={speaker:heading[1].trim(),text:''};continue;}
+  if(/^\s*\d+\.\s*$/.test(line))continue;
+  const m=pats.map(p=>line.match(p)).find(Boolean);
+  if(m){if(cur)out.push(cur);cur={speaker:m[1].trim(),text:m[2].trim()};}
+  else if(cur&&line.trim())cur.text+=(cur.text?'\n':'')+line.trim();
+ }
  if(cur)out.push(cur);
- return out.filter(x=>x.speaker&&x.text).map(x=>{let type='speech',text=x.text;if(/^\*\*.*\*\*$/.test(text)||/^\*.*\*$/.test(text)||/^_.*_$/.test(text)){type='action';text=text.replace(/^\*+|\*+$|^_+|_+$/g,'').trim();}else if(/^\(\(.*\)\)$/.test(text)||/^\[pensamento\]/i.test(text)){type='thought';text=text.replace(/^\(\(|\)\)$|^\[pensamento\]\s*/gi,'').trim();}else if(/^\[ação\]/i.test(text)){type='action';text=text.replace(/^\[ação\]\s*/i,'').trim();}return {...x,text,type};});
+ return out.filter(x=>x.speaker&&x.text).map(x=>{let type='speech',text=x.text;
+  if(/^\*(?!\*)([\s\S]*?)(?<!\*)\*$/.test(text)){type='action';text=text.slice(1,-1).trim();}
+  else if(/^\(\([\s\S]*\)\)$/.test(text)||/^\[pensamento\]/i.test(text)){type='thought';text=text.replace(/^\(\(|\)\)$|^\[pensamento\]\s*/gi,'').trim();}
+  else if(/^\[ação\]/i.test(text)){type='action';text=text.replace(/^\[ação\]\s*/i,'').trim();}
+  return {...x,text,type};
+ });
 }
 function openDiscordHistoryImport(){
  const modal=document.createElement('div');modal.id='discord-import-modal';modal.style.cssText='position:fixed;inset:0;z-index:9999;background:#080910ee;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';
- modal.innerHTML=`<div style="background:#171827;border:1px solid #39334e;border-radius:16px;padding:18px;width:min(680px,100%);max-height:92vh;overflow:auto;color:#f4f0ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">📥 Importar histórico do Discord</h2><button class="btn btn-secondary btn-sm" onclick="document.getElementById('discord-import-modal').remove()">Fechar</button></div><p style="color:#b8b3c8;font-size:.88rem">Cole o histórico. Formato: <b>Nome: mensagem</b>. Use *texto* para ações e ((texto)) para pensamentos.</p><textarea id="discord-history-raw" class="input" rows="9" style="width:100%;resize:vertical" placeholder="Lorenzo: Oi!&#10;Kafka: *sorri de lado*&#10;Kafka: Olá.&#10;Kafka: ((Será interessante...))"></textarea><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="analyzeDiscordHistory()">Analisar participantes</button><div id="discord-import-step2" style="margin-top:14px"></div></div>`;
+ modal.innerHTML=`<div style="background:#171827;border:1px solid #39334e;border-radius:16px;padding:18px;width:min(680px,100%);max-height:92vh;overflow:auto;color:#f4f0ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">📥 Importar histórico do Discord</h2><button class="btn btn-secondary btn-sm" onclick="document.getElementById('discord-import-modal').remove()">Fechar</button></div><p style="color:#b8b3c8;font-size:.88rem">Cole o histórico. Formato: <b>Nome: mensagem</b>. Use *texto* (um asterisco no início e outro no final) para ações e ((texto)) para pensamentos.</p><textarea id="discord-history-raw" class="input" rows="9" style="width:100%;resize:vertical" placeholder="Lorenzo: Oi!&#10;Kafka: *sorri de lado*&#10;Kafka: Olá.&#10;Kafka: ((Será interessante...))"></textarea><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="analyzeDiscordHistory()">Analisar participantes</button><div id="discord-import-step2" style="margin-top:14px"></div></div>`;
  document.body.appendChild(modal);
 }
 function analyzeDiscordHistory(){
