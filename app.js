@@ -155,7 +155,7 @@ async function syncMyProfileFromAppUser(user) {
   return emmaApi('sync_my_profile', {
     coins:user.coins, gender:user.gender || 'other',
     chatPreference:user.chatPreference || 'both', avatar:user.avatar || null,
-    allowBotTakeover:!!user.allowBotTakeover
+    allowBotTakeover:!!user.allowBotTakeover, isAnonymous:!!user.isAnonymous
   });
 }
 
@@ -164,7 +164,8 @@ function profileToAppUser(p) {
     id: p.id, username: p.username, isAdmin: p.role === 'admin',
     userType: p.user_type || 'player', gender: p.gender || 'other',
     chatPreference: p.chat_preference || 'both', avatar: p.avatar || null,
-    allowBotTakeover: !!p.allow_bot_takeover,
+    allowBotTakeover: !!p.allow_bot_takeover, isAnonymous:!!p.is_anonymous,
+    creatorLevel:Number(p.creator_level||1),creatorXp:Number(p.creator_xp||0),creatorDailyMessages:Number(p.creator_daily_messages||0),creatorWeeklyMessages:Number(p.creator_weekly_messages||0),creatorLevel99RewardClaimed:!!p.creator_level99_reward_claimed,
     assignedCharacterId: p.assigned_character_id || null,
     characterRequest: { status: p.character_request_status || 'none', requestedAt: p.character_request_at ? Date.parse(p.character_request_at) : null },
     joinDate: p.created_at ? Date.parse(p.created_at) : Date.now(),
@@ -212,13 +213,13 @@ async function loadEmmaBackendState() {
 
   // Busca só o necessário para a conta atual. Administradores continuam vendo os dados completos.
   const [charactersRows, chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,description,gender,bot_personality,control_mode,is_banned,ban_until,ban_reason,owner_user_id,is_online'}),
+    fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,description,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
     fetchAllEmmaRows('chats', null, adminSession
       ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'}
       : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'')}),
     adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : Promise.resolve([]),
     adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
-    fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,type,target,is_new_user'}),
+    fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,type,target,is_new_user'}),
     emmaApi('get_public_config')
   ]);
 
@@ -240,7 +241,7 @@ async function loadEmmaBackendState() {
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
-    gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isBanned:!!c.is_banned,
+    gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:c.owner_user_id ? !!(users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000) : !!c.is_online
   }));
@@ -267,7 +268,7 @@ async function loadEmmaBackendState() {
   }));
   DB.set('users', users); DB.set('characters', characters); DB.set('chats', chats);
   DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
-  DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
+  DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,xpReward:Number(m.xp_reward||0),type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
   if (publicConfig?.config) { const config = cfg(); Object.assign(config, publicConfig.config); DB.set('config', config); }
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
@@ -837,6 +838,7 @@ function renderAuthScreen() {
           <button type="button" class="chip-select" data-val="other" onclick="selectChip(this,'auth-gender')">✦ Outro</button>
         </div>
       </div>
+      <div class="field"><label><input type="checkbox" id="pref-anonymous" ${user.isAnonymous ? "checked" : ""}> Manter minha conta anônima (detalhes só aparecem quando eu seguir de volta)</label></div>
       <div class="field">
         <label>Preferência de conversa</label>
         <div class="chip-group" id="auth-chatpref">
@@ -1740,6 +1742,7 @@ function renderProfileTab(container) {
         <div style="display:flex;gap:6px;justify-content:center;margin-top:6px;flex-wrap:wrap">
           <span class="chip">${typeLabel}</span>
           <span class="chip">${genderLabel}</span>
+          ${user.isAnonymous ? '<span class="chip">👤 Anônimo</span>' : ""}
           <span class="chip">🔍 ${prefLabel}</span>
         </div>
         <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="showEditPreferencesModal()">✏️ Editar preferências</button>
@@ -1778,6 +1781,7 @@ function renderProfileTab(container) {
             ? '<div class="admin-row-sub" style="margin:8px 0">Sua solicitação anterior não foi aprovada. Você pode solicitar novamente.</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar novamente</button>'
             : '<div class="admin-row-sub" style="margin:8px 0">Quer interpretar um personagem e conversar com outros jogadores?</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Quero ser um personagem</button>'}
       </div>
+      ${user.userType === "character" || assignedChar ? `<div class="admin-section creator-level-card" style="margin:14px 16px;padding:16px"><b>🏆 Nível do criador</b><div class="creator-level-number">Nível ${Number(user.creatorLevel||1)} / 99</div><div class="creator-level-track"><div style="width:${Number(user.creatorLevel)>=99?100:Math.max(0,Math.min(100,(Number(user.creatorXp||0)/(100*Number(user.creatorLevel||1)*(Number(user.creatorLevel||1)+1)/2))*100))}%"></div></div><div class="admin-row-sub">${Number(user.creatorXp||0).toLocaleString("pt-BR")} XP · Hoje ${Number(user.creatorDailyMessages||0)}/100 mensagens (+500 XP) · Semana ${Number(user.creatorWeeklyMessages||0)}/2.000 (+1.850 XP)</div>${Number(user.creatorLevel)>=99?(user.creatorLevel99RewardClaimed?'<span class="chip chip-gold">Premium de nível 99 resgatado</span>':'<span class="chip chip-gold">Nível máximo alcançado</span>'):""}</div>` : ""}
       <div class="admin-section" style="margin:14px 16px;padding:16px">
         <b>📥 Importar histórico do Discord</b>
         <div class="admin-row-sub" style="margin:8px 0">Cole uma conversa antiga, associe cada participante aos personagens e importe no chat privado.</div>
@@ -2569,6 +2573,7 @@ function showAddCharModal(editId = null) {
         </div>
       </div>
       <div class="field"><label>Descrição</label><input class="input" id="cf-desc" value="${escapeHtml(char?.description||'')}"></div>
+      <div class="field"><label><input type="checkbox" id="cf-is-vip" ${char?.isVip ? "checked" : ""}> Marcar como personagem VIP</label></div>
       <div class="field"><label>Quem pode controlar este personagem?</label><select class="input" id="cf-control-mode"><option value="bot" ${char?.controlMode==='bot'?'selected':''}>Somente bot</option><option value="both" ${(!char?.controlMode||char?.controlMode==='both')?'selected':''}>Ambos (bot e usuários)</option><option value="users" ${char?.controlMode==='users'?'selected':''}>Somente usuários</option></select></div>
       <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${escapeHtml(char?.botPersonality||'')}</textarea></div>
       <div class="modal-actions">
@@ -2676,6 +2681,7 @@ async function saveChar(editId, btn) {
       char.botPersonality = el('cf-personality').value.trim();
       char.gender = gender;
       char.controlMode = controlMode;
+      char.isVip = !!el("cf-is-vip")?.checked;
     }
   } else {
     chars.push({
@@ -2687,6 +2693,7 @@ async function saveChar(editId, btn) {
       botPersonality: el('cf-personality').value.trim(),
       gender,
       controlMode,
+      isVip:!!el("cf-is-vip")?.checked,
       isOnline: false,
       isBanned: false,
       banUntil: null,
@@ -2712,7 +2719,8 @@ function showAddMissionModal() {
       <div class="field"><label>Descrição</label><input class="input" id="mf-desc" placeholder="Ex: Envie 3 mensagens"></div>
       <div class="field"><label>Ícone (emoji)</label><input class="input" id="mf-icon" value="🎯"></div>
       <div class="form-row">
-        <div class="field"><label>Recompensa🪙</label><input type="number" class="input" id="mf-reward" value="50" min="1"></div>
+        <div class="field"><label>Recompensa🪙</label><input type="number" class="input" id="mf-reward" value="50" min="0"></div>
+        <div class="field"><label>Recompensa de XP</label><input type="number" class="input" id="mf-xp" value="100" min="0"></div>
         <div class="field"><label>Meta</label><input type="number" class="input" id="mf-target" value="1" min="1"></div>
       </div>
       <div class="field">
@@ -2739,7 +2747,7 @@ async function saveMission(btn) {
   if (!title) return toast('Título obrigatório.', 'error');
   const mission = {
     id: 'm_' + Date.now(), title, description: el('mf-desc').value.trim(),
-    icon: el('mf-icon').value || '🎯', reward: parseInt(el('mf-reward').value) || 50,
+    icon: el('mf-icon').value || '🎯', reward: parseInt(el('mf-reward').value) || 0, xpReward:Math.max(0,parseInt(el('mf-xp').value)||0),
     target: parseInt(el('mf-target').value) || 1, type: el('mf-type').value, isNewUser: false
   };
   try {
@@ -2828,6 +2836,7 @@ function savePreferences(btn) {
     user.userType = getChipVal('pref-usertype', 'player');
     user.gender = getChipVal('pref-gender', 'other');
     user.chatPreference = getChipVal('pref-chatpref', 'both');
+    user.isAnonymous = !!el('pref-anonymous')?.checked;
     DB.set('users', users);
     state.currentUser = user;
     syncMyProfileFromAppUser(user).catch(console.warn);
