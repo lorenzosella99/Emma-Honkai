@@ -1569,7 +1569,12 @@ function renderProfileTab(container) {
             ? '<div class="admin-row-sub" style="margin:8px 0">Sua solicitação anterior não foi aprovada. Você pode solicitar novamente.</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar novamente</button>'
             : '<div class="admin-row-sub" style="margin:8px 0">Quer interpretar um personagem e conversar com outros jogadores?</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Quero ser um personagem</button>'}
       </div>
-      <div class="section-title">Chats abertos</div>
+      <div class="admin-section" style="margin:14px 16px;padding:16px">
+        <b>📥 Importar histórico do Discord</b>
+        <div class="admin-row-sub" style="margin:8px 0">Cole uma conversa antiga, associe cada participante aos personagens e importe no chat privado.</div>
+        <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="openDiscordHistoryImport()">Importar histórico</button>
+      </div>
+            <div class="section-title">Chats abertos</div>
       <div class="chat-list" id="open-chats-list"></div>
 
       ${user.isAdmin ? `
@@ -1586,6 +1591,34 @@ function renderProfileTab(container) {
 
   renderOpenChats(el('open-chats-list'), chats);
   if (assignedChar) renderCharacterInbox(el('character-inbox'), assignedChar, myCharacterChats);
+}
+
+
+let discordImportDraft=null;
+function parseDiscordHistory(raw){
+ const lines=String(raw||'').replace(/\\r/g,'').split('\\n');const out=[];let cur=null;
+ const pats=[/^\\[(?:\\d{1,4}[\\/-])?[^\\]]+\\]\\s*([^:]{1,100}):\\s*(.*)$/,/^(?:\\[[^\\]]+\\]\\s*)?([^:]{1,80}):\\s+(.*)$/];
+ for(const line of lines){const m=pats.map(p=>line.match(p)).find(Boolean);if(m){if(cur)out.push(cur);cur={speaker:m[1].trim(),text:m[2].trim()};}else if(cur&&line.trim())cur.text+='\\n'+line.trim();}
+ if(cur)out.push(cur);
+ return out.filter(x=>x.speaker&&x.text).map(x=>{let type='speech',text=x.text;if(/^\\*\\*.*\\*\\*$/.test(text)||/^\\*.*\\*$/.test(text)||/^_.*_$/.test(text)){type='action';text=text.replace(/^\\*+|\\*+$|^_+|_+$/g,'').trim();}else if(/^\\(\\(.*\\)\\)$/.test(text)||/^\\[pensamento\\]/i.test(text)){type='thought';text=text.replace(/^\\(\\(|\\)\\)$|^\\[pensamento\\]\\s*/gi,'').trim();}else if(/^\\[ação\\]/i.test(text)){type='action';text=text.replace(/^\\[ação\\]\\s*/i,'').trim();}return {...x,text,type};});
+}
+function openDiscordHistoryImport(){
+ const modal=document.createElement('div');modal.id='discord-import-modal';modal.style.cssText='position:fixed;inset:0;z-index:9999;background:#080910ee;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';
+ modal.innerHTML=`<div style="background:#171827;border:1px solid #39334e;border-radius:16px;padding:18px;width:min(680px,100%);max-height:92vh;overflow:auto;color:#f4f0ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">📥 Importar histórico do Discord</h2><button class="btn btn-secondary btn-sm" onclick="document.getElementById('discord-import-modal').remove()">Fechar</button></div><p style="color:#b8b3c8;font-size:.88rem">Cole o histórico. Formato: <b>Nome: mensagem</b>. Use *texto* para ações e ((texto)) para pensamentos.</p><textarea id="discord-history-raw" class="input" rows="9" style="width:100%;resize:vertical" placeholder="Lorenzo: Oi!&#10;Kafka: *sorri de lado*&#10;Kafka: Olá.&#10;Kafka: ((Será interessante...))"></textarea><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="analyzeDiscordHistory()">Analisar participantes</button><div id="discord-import-step2" style="margin-top:14px"></div></div>`;
+ document.body.appendChild(modal);
+}
+function analyzeDiscordHistory(){
+ const entries=parseDiscordHistory(document.getElementById('discord-history-raw')?.value||'');if(!entries.length)return toast('Não encontrei mensagens. Use o formato Nome: mensagem.','error');if(entries.length>500)return toast('Importe no máximo 500 mensagens por vez.','error');
+ const speakers=[...new Set(entries.map(e=>e.speaker))];discordImportDraft={entries,speakers};const chars=DB.get('characters',[]),chats=DB.get('chats',[]).filter(c=>c.userId===state.currentUser.id);
+ const opts='<option value="">— Escolher personagem —</option>'+chars.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.name)+'</option>').join('');
+ const chatOpts=chats.map(c=>{const ch=chars.find(x=>x.id===c.charId);return '<option value="'+escapeHtml(c.id)+'">'+escapeHtml(ch?.name||c.charId)+'</option>';}).join('');
+ const area=document.getElementById('discord-import-step2');
+ area.innerHTML=`<h3>Quem é cada participante?</h3><p style="color:#b8b3c8;font-size:.85rem">O Emma separou ${entries.length} mensagens. Associe cada pessoa a você ou a um personagem.</p><label>Chat privado de destino</label><select id="discord-import-chat" class="input" style="width:100%;margin:6px 0 12px">${chatOpts}</select><div style="display:grid;gap:10px">${speakers.map(sp=>'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center"><b>'+escapeHtml(sp)+'</b><select class="input discord-speaker-map" data-speaker="'+escapeHtml(sp)+'"><option value="__self">Eu / jogador</option>'+opts+'</select></div>').join('')}</div><div style="margin-top:12px;padding:10px;background:#222238;border-radius:10px;font-size:.85rem">🧠 ${entries.filter(e=>e.type==='thought').length} pensamento(s). Só serão importados se sua assinatura estiver ativa.</div><button class="btn btn-primary btn-full" style="margin-top:12px" onclick="confirmDiscordHistoryImport()">Importar mensagens</button>`;
+ if(!chats.length)area.innerHTML+='<p style="color:#ffbd6b">Você ainda não tem chats privados. Abra um personagem e crie um chat antes de importar.</p>';
+}
+async function confirmDiscordHistoryImport(){
+ const chatId=document.getElementById('discord-import-chat')?.value;if(!chatId)return toast('Escolha um chat privado de destino.','error');const mapping={};document.querySelectorAll('.discord-speaker-map').forEach(s=>mapping[s.dataset.speaker]=s.value);if(Object.values(mapping).some(v=>!v))return toast('Associe todos os participantes.','error');
+ try{const result=await emmaApi('import_discord_history',{chatId,entries:discordImportDraft.entries.map(e=>({speaker:e.speaker,text:e.text,type:e.type,sender:mapping[e.speaker]}))});await loadEmmaBackendState();document.getElementById('discord-import-modal')?.remove();toast('Importadas '+result.imported+' mensagens.'+(result.skippedThoughts?' '+result.skippedThoughts+' pensamento(s) ignorado(s): assinatura inativa.':''),'success',7000);if(state.currentChat?.chatId===chatId)loadMessages();if(state.currentTab==='profile')switchTab('profile');}catch(e){toast('Falha ao importar: '+e.message,'error',8000);}
 }
 
 async function requestCharacterRole() {
