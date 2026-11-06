@@ -227,15 +227,37 @@ async function refreshEmmaBackendState() {
   }
 }
 
+// Agrupa eventos Realtime próximos para evitar várias leituras completas em sequência.
+let emmaRefreshTimer = null;
+let emmaRefreshRunning = false;
+let emmaRefreshPending = false;
+function scheduleEmmaBackendRefresh() {
+  emmaRefreshPending = true;
+  clearTimeout(emmaRefreshTimer);
+  emmaRefreshTimer = setTimeout(async () => {
+    if (emmaRefreshRunning) return;
+    emmaRefreshRunning = true;
+    try {
+      while (emmaRefreshPending) {
+        emmaRefreshPending = false;
+        await refreshEmmaBackendState();
+      }
+    } finally {
+      emmaRefreshRunning = false;
+      if (emmaRefreshPending) scheduleEmmaBackendRefresh();
+    }
+  }, 350);
+}
+
 function subscribeEmmaRealtime() {
   if (!emmaSupabase || emmaRealtimeChannel) return;
   emmaRealtimeChannel = emmaSupabase.channel('emma-live-data')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refreshEmmaBackendState)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'characters' }, refreshEmmaBackendState)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'character_applications' }, refreshEmmaBackendState)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, refreshEmmaBackendState)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, refreshEmmaBackendState)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'character_reports' }, refreshEmmaBackendState)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleEmmaBackendRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'characters' }, scheduleEmmaBackendRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'character_applications' }, scheduleEmmaBackendRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, scheduleEmmaBackendRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, scheduleEmmaBackendRefresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'character_reports' }, scheduleEmmaBackendRefresh)
     .subscribe();
 }
 
