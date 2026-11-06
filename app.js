@@ -54,6 +54,38 @@ async function emmaAuthRequest(action, payload) {
   return data;
 }
 
+async function emmaLegalRequest(action, payload = {}) {
+  const {data:{session}} = await emmaSupabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Entre novamente para verificar as políticas.');
+  const response = await fetch(EMMA_SUPABASE_URL + '/functions/v1/emma-legal', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', apikey:EMMA_SUPABASE_KEY, Authorization:'Bearer '+session.access_token},
+    body:JSON.stringify({action,...payload})
+  });
+  const result = await response.json().catch(()=>({}));
+  if (!response.ok) throw new Error(result.error || 'Não foi possível verificar as políticas.');
+  return result;
+}
+async function continueAfterAuthentication() {
+  const legal = await emmaLegalRequest('status');
+  if (legal.required) { showScreen('screen-legal'); return; }
+  await startApp();
+}
+async function acceptLegalPolicies(button) {
+  const privacy = el('legal-privacy-check')?.checked === true;
+  const security = el('legal-security-check')?.checked === true;
+  if (!privacy || !security) return toast('Marque as duas opções para continuar.', 'error');
+  button.disabled = true; button.textContent = 'Registrando aceite…';
+  try {
+    await emmaLegalRequest('accept', {privacyAccepted:privacy,securityAccepted:security});
+    toast('Políticas aceitas. Seu aceite será renovado em um ano.', 'success');
+    await startApp();
+  } catch (e) {
+    toast(e.message || 'Não foi possível registrar o aceite.', 'error');
+    button.disabled = false; button.textContent = 'Concordar e continuar';
+  }
+}
+
 async function emmaApi(action, payload = {}) {
   if (!emmaSupabase) throw new Error('O serviço de autenticação não carregou. Atualize a página.');
   const { data, error } = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
@@ -778,7 +810,7 @@ function initAuth() {
       await loadEmmaBackendState();
       subscribeEmmaRealtime();
       if (authMode === 'register') toast('Conta criada! Agora seus dados ficam sincronizados.', 'success', 3500);
-      await startApp();
+      await continueAfterAuthentication();
     } catch (e) {
       toast(e.message || 'Não foi possível entrar.', 'error');
     } finally { submit.disabled = false; }
@@ -2599,7 +2631,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         state.currentUser = user;
         DB.set('current_user', user.id);
         subscribeEmmaRealtime();
-        await startApp();
+        await continueAfterAuthentication();
         return;
       }
       await emmaSupabase.auth.signOut();
