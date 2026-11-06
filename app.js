@@ -1134,7 +1134,7 @@ function renderCharsTab(container) {
     </div>
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
-      <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div></div>
+      <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
       <div class="section-title">🤖 Bots Online</div>
       <div class="chars-grid" id="chars-grid-bots-online">
         ${Array(2).fill(skeletonCard).join('')}
@@ -1163,12 +1163,15 @@ function setCharPref(pref) {
   switchTab('chars');
 }
 
+function setCharacterFilter(filter) { state.characterFilter=filter==="vip"?"vip":"normal"; renderCharsTab(el("screen-main-content")||el("screen-main")); }
+
 function _renderCharsContent(pref) {
   const chars = DB.get('characters', []);
   const users = DB.get('users', []);
+  const category=state.characterFilter||"normal";
 
   // Apply gender filter to bots
-  let bots = chars.filter(c => !c.isBanned && !c.ownerUserId);
+  let bots = chars.filter(c => !c.isBanned && !c.ownerUserId && (category==="vip"?c.isVip:!c.isVip));
   if (pref === 'female') bots = bots.filter(c => c.gender === 'female');
   else if (pref === 'male') bots = bots.filter(c => c.gender === 'male');
 
@@ -1196,7 +1199,13 @@ function _renderCharsContent(pref) {
 
   if (gbOn) renderCharGrid(gbOn, botsOnline);
   if (gbAll) renderCharGrid(gbAll, botsOffline);
-  if (gpPlayers) renderPlayerGrid(gpPlayers, filteredPlayers);
+  if (gpPlayers) {
+    gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
+    emmaApi("creator_directory",{}).then(({creators=[]})=>{
+      const filtered=creators.filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+      renderPlayerGrid(gpPlayers,filtered);
+    }).catch(()=>{gpPlayers.innerHTML='<div class="admin-row-sub">Não foi possível carregar os criadores.</div>';});
+  }
   if (playersSec) playersSec.style.display = pref === 'bots' ? 'none' : '';
 }
 
@@ -1223,7 +1232,7 @@ function renderCharGrid(container, chars) {
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
-          <div class="char-name">${escapeHtml(c.name)}</div>
+          <div class="char-name">${escapeHtml(c.name)} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
           <div class="char-role">${escapeHtml(c.role)}</div>
         </div>
       </div>
@@ -1234,29 +1243,28 @@ function renderCharGrid(container, chars) {
 function renderPlayerGrid(container, players) {
   if (!container) return;
   if (!players.length) {
-    container.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum jogador-personagem disponível</div>';
+    container.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum criador nesta categoria</div>';
     return;
   }
-  const characters = DB.get('characters', []);
   container.innerHTML = players.map(u => {
-    const assigned = characters.find(c => c.ownerUserId === u.id);
-    const avatarSrc = assigned?.image || u.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(u.username)}`;
-    const displayName = assigned?.name || u.username;
-    const genderIcon = u.gender === 'female' ? '♀' : u.gender === 'male' ? '♂' : '✦';
-    const online = !!(u.lastSeenAt && Date.now() - Number(u.lastSeenAt) < 60000);
-    return `
-      <div class="char-card" onclick="${assigned ? `openChat('${assigned.id}')` : `openPlayerChat('${u.id}')`}">
-        <div class="char-img-wrap">
-          <img src="${avatarSrc}" alt="${escapeHtml(displayName)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'" style="object-fit:cover">
-          <div class="char-status-dot ${online ? 'online' : 'bot'}"></div>
-        </div>
-        <div class="char-info">
-          <div class="char-name">${escapeHtml(displayName)}</div>
-          <div class="char-role">${genderIcon} ${assigned ? 'Personagem' : 'Jogador-personagem'}</div>
-        </div>
-      </div>
-    `;
+    const assigned=u.character||null;
+    const avatarSrc=assigned?.image||u.avatar||FALLBACK_SVG;
+    const displayName=assigned?.name||u.username;
+    const online=!!(u.lastSeenAt&&Date.now()-Number(u.lastSeenAt)<60000);
+    const details=u.detailsVisible?'<div class="char-role">'+escapeHtml(u.username)+' · Nível '+Number(u.level||1)+'</div>':'<div class="char-role">Detalhes ocultos até seguimento mútuo</div>';
+    return '<div class="char-card creator-card" onclick="openChat(\''+(assigned?.id||'')+'\')"><div class="char-img-wrap"><img src="'+avatarSrc+'" alt="'+escapeHtml(displayName)+'" loading="lazy" onerror="this.src=\''+FALLBACK_SVG+'\'" style="object-fit:cover"><div class="char-status-dot '+(online?'online':'bot')+'"></div></div><div class="char-info"><div class="char-name">'+escapeHtml(displayName)+(u.isVip?' <span class="chip chip-gold">VIP</span>':'')+'</div>'+details+'<button class="btn btn-secondary btn-sm" style="margin-top:7px" onclick="event.stopPropagation();toggleCreatorFollow(\''+u.userId+'\','+(!u.following)+')">'+(u.following?'Seguindo':'Seguir')+'</button></div></div>';
   }).join('');
+}
+async function toggleCreatorFollow(userId,follow) {
+  try {
+    await emmaApi("follow_creator",{userId,follow});
+    const {creators=[]}=await emmaApi("creator_directory",{});
+    const target=creators.find(c=>c.userId===userId);
+    if(target)toast(target.mutual?"Seguimento mútuo! Detalhes liberados.":(follow?"Você está seguindo o criador.":"Você deixou de seguir."),"success");
+    const pref=state.currentUser.chatPreference||"both",category=state.characterFilter||"normal";
+    const filtered=creators.filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+    renderPlayerGrid(el("chars-grid-players"),filtered);
+  } catch(e) { toast(e.message||"Não foi possível atualizar o seguimento.","error"); }
 }
 
 function openPlayerChat(userId) {
