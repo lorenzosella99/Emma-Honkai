@@ -173,6 +173,8 @@ function profileToAppUser(p) {
     thoughtsBought: Number(p.thoughts_bought || 0), uniqueCharsContacted: Array.isArray(p.unique_chars_contacted) ? p.unique_chars_contacted : [],
     missionProgress: p.mission_progress || {}, completedMissions: Array.isArray(p.completed_missions) ? p.completed_missions : [],
     thoughtSubscription: p.thought_subscription || null,
+    premiumSubscription: p.premium_subscription || null,
+    premiumSubscriptionHistory: Array.isArray(p.premium_subscription_history) ? p.premium_subscription_history : [],
     thoughtSubscriptionHistory: Array.isArray(p.thought_subscription_history) ? p.thought_subscription_history : [],
     subscriptionRenewalBanned: !!p.subscription_renewal_banned,
     bannedUntil: p.banned_until ? Date.parse(p.banned_until) : null, banReason: p.ban_reason || '',
@@ -269,6 +271,7 @@ async function loadEmmaBackendState() {
   if (publicConfig?.config) { const config = cfg(); Object.assign(config, publicConfig.config); DB.set('config', config); }
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
+  applyPremiumTheme();
   if (state.currentUser?.bannedUntil && Date.now() < state.currentUser.bannedUntil) {
     await emmaSupabase.auth.signOut();
     localStorage.removeItem('emma_current_user');
@@ -437,7 +440,7 @@ const DEFAULT_CHARACTERS = [
 
 // ─── DYNAMIC BOT RESPONSE ENGINE ─────────────────────────────────────────────
 // Gera respostas contextuais baseadas na personalidade do personagem e na mensagem do usuário
-function generateBotResponse(char, userMessage, history) {
+function generateBotResponse(char, userMessage, history, premium = false) {
   const msg = userMessage.toLowerCase();
   const personality = (char.botPersonality || '').toLowerCase();
   const name = char.name;
@@ -613,6 +616,11 @@ function generateBotResponse(char, userMessage, history) {
     }
   }
 
+  if (premium) {
+    const personalReference = userMessage.trim().replace(/[<>]/g, '').slice(0, 110);
+    result.push({ type: 'action', text: 'se aproxima com calma, mantém o olhar em você e demonstra atenção aos pequenos detalhes da conversa' });
+    result.push({ type: 'speech', text: personalReference ? 'Quero prestar atenção de verdade no que você acabou de dizer: “' + personalReference + '”. Gosto quando você divide comigo o que está passando pela sua cabeça. Pode continuar, estou aqui com você.' : 'Gosto de ter esse momento só nosso. Quero conhecer melhor cada detalhe do que você pensa e sente.' });
+  }
   return result;
 }
 
@@ -995,7 +1003,10 @@ function checkDailyMission() {
 }
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
+function isPremiumActive(user = state.currentUser) { return !!(user?.premiumSubscription?.expiresAt && Number(user.premiumSubscription.expiresAt) > Date.now()); }
+function applyPremiumTheme() { document.body.classList.toggle('premium-theme', isPremiumActive()); }
 function renderMainApp() {
+  applyPremiumTheme();
   if (state.currentUser.isAdmin) {
     el('admin-nav-btn').classList.remove('hidden');
   }
@@ -1014,19 +1025,24 @@ function updateCoinsDisplay() {
 }
 
 function renderStoreTab(container) {
-  const users = DB.get('users', []);
-  const user = users.find(u => u.id === state.currentUser.id) || state.currentUser;
-  const config = cfg();
-  const p = config.thoughtPlans || { monthly: 500, yearly: 4500, oldMonthly: 650, oldYearly: 5500, promoMonthly: 350, promoYearly: 3000, promoEnabled: false };
-  const active = user.thoughtSubscription && user.thoughtSubscription.expiresAt > Date.now();
-  const monthly = p.promoEnabled ? p.promoMonthly : p.monthly;
-  const yearly = p.promoEnabled ? p.promoYearly : p.yearly;
-  container.innerHTML = '<div class="app-header"><div class="header-title">Loja de Pensamentos</div><div class="header-coins">🪙 <span class="coins-display">' + user.coins + '</span></div></div>' +
-    '<div style="padding:16px;padding-bottom:calc(var(--nav-h) + 16px)">' +
-    '<div class="admin-section" style="padding:16px"><b>' + (active ? 'Assinatura ativa' : 'Sem assinatura ativa') + '</b><div style="font-size:.85rem;margin-top:6px">' + (active ? 'Válida até ' + new Date(user.thoughtSubscription.expiresAt).toLocaleString('pt-BR') : 'Assine para comprar novos pensamentos.') + '</div><div style="font-size:.78rem;color:var(--text-3);margin-top:8px">Pensamentos já desbloqueados continuam disponíveis após a expiração.</div></div>' +
-    '<div class="admin-section" style="padding:16px"><b>Plano mensal</b><div style="font-size:1.4rem;margin:10px 0">🪙 ' + Number(monthly).toLocaleString('pt-BR') + '</div>' + (p.promoEnabled && p.oldMonthly > monthly ? '<del>Antes: ' + p.oldMonthly + '</del><div>Promoção ativa</div>' : '') + '<button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'monthly\')">Assinar por 30 dias</button></div>' +
-    '<div class="admin-section" style="padding:16px"><b>Plano anual</b><div style="font-size:1.4rem;margin:10px 0">🪙 ' + Number(yearly).toLocaleString('pt-BR') + '</div>' + (p.promoEnabled && p.oldYearly > yearly ? '<del>Antes: ' + p.oldYearly + '</del><div>Promoção ativa</div>' : '') + '<button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'yearly\')">Assinar por 365 dias</button></div>' +
-    '<div style="font-size:.75rem;color:var(--text-3);text-align:center">Somente moedas Emma. Sem dinheiro real.</div></div>';
+  const users=DB.get('users',[]), user=users.find(u=>u.id===state.currentUser.id)||state.currentUser;
+  const config=cfg(), p=config.thoughtPlans||{monthly:500,yearly:4500,oldMonthly:650,oldYearly:5500,promoMonthly:350,promoYearly:3000,promoEnabled:false};
+  const active=user.thoughtSubscription&&user.thoughtSubscription.expiresAt>Date.now(), premium=isPremiumActive(user);
+  const monthly=p.promoEnabled?p.promoMonthly:p.monthly, yearly=p.promoEnabled?p.promoYearly:p.yearly;
+  container.innerHTML='<div class="app-header"><div class="header-title">Loja Emma</div><div class="header-coins">🪙 <span class="coins-display">'+user.coins+'</span></div></div>'+
+  '<div style="padding:16px;padding-bottom:calc(var(--nav-h) + 16px)">'+
+  '<div class="admin-section" style="padding:16px"><b>'+(active?'Assinatura de pensamentos ativa':'Assinatura de pensamentos inativa')+'</b><div style="font-size:.85rem;margin-top:6px">'+(active?'Válida até '+new Date(user.thoughtSubscription.expiresAt).toLocaleString('pt-BR'):'Assine para comprar novos pensamentos.')+'</div><div style="font-size:.78rem;color:var(--text-3);margin-top:8px">Pensamentos já desbloqueados continuam disponíveis após a expiração.</div></div>'+
+  '<div class="admin-section" style="padding:16px"><b>Plano mensal de pensamentos</b><div style="font-size:1.4rem;margin:10px 0">🪙 '+Number(monthly).toLocaleString('pt-BR')+'</div><button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'monthly\')">Assinar por 30 dias</button></div>'+
+  '<div class="admin-section" style="padding:16px"><b>Plano anual de pensamentos</b><div style="font-size:1.4rem;margin:10px 0">🪙 '+Number(yearly).toLocaleString('pt-BR')+'</div><button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'yearly\')">Assinar por 365 dias</button></div>'+
+  '<section class="premium-plan-card"><div class="premium-plan-kicker">✦ EXPERIÊNCIA EXCLUSIVA</div><h2>Emma Premium</h2><p>Conversas com um tom mais íntimo, envolvente e específico, com ações mais detalhadas. Também desbloqueia o novo visual exclusivo do site.</p><div class="premium-benefits"><span>♡ Interações mais próximas</span><span>✧ Ações mais detalhadas</span><span>🎨 Visual Premium exclusivo</span></div>'+
+  (premium?'<div class="premium-active">Premium ativo até '+new Date(Number(user.premiumSubscription.expiresAt)).toLocaleString('pt-BR')+'</div>':'<div class="premium-prices"><div><b>7 dias</b><strong>🪙 22.000</strong><button class="btn btn-primary btn-full" onclick="buyPremiumSubscription(\'weekly\')">Ativar por 7 dias</button></div><div><b>1 ano</b><strong>🪙 946.000</strong><button class="btn btn-primary btn-full" onclick="buyPremiumSubscription(\'yearly\')">Ativar por 1 ano</button></div></div>')+
+  '<div class="premium-note">Pagamento somente com moedas Emma. Sem dinheiro real.</div></section></div>';
+}
+async function buyPremiumSubscription(period) {
+  const label=period==='weekly'?'7 dias por 22.000 moedas':'1 ano por 946.000 moedas';
+  if(!confirm('Ativar Emma Premium: '+label+'?'))return;
+  try { await emmaApi('purchase_premium_subscription',{period}); await loadEmmaBackendState(); applyPremiumTheme(); updateCoinsDisplay(); toast('Emma Premium ativado! Seu visual exclusivo já está disponível.','success'); switchTab('store'); }
+  catch(e){toast(e.message||'Não foi possível ativar o Premium.','error');}
 }
 
 async function buyThoughtSubscription(period) {
@@ -1550,7 +1566,7 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
   const userText = lastUserMsg ? lastUserMsg.text : '';
 
   // Generate dynamic response based on personality + user message
-  const responses = generateBotResponse(char, userText, chatHistory);
+  const responses = generateBotResponse(char, userText, chatHistory, isPremiumActive());
 
   if (responses.length === 0) {
     state.isTyping = false;
