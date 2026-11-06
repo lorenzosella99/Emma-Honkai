@@ -183,7 +183,10 @@ async function refreshEmmaBackendState() {
       renderMessages(current);
     }
     if (state.currentTab === 'profile') switchTab('profile');
-    if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden')) renderAdminPanel();
+    const active = document.activeElement;
+    const editingAdminField = active && el('screen-admin')?.contains(active) &&
+      /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
+    if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden') && !editingAdminField) renderAdminPanel();
   } catch (e) {
     if (!state.currentUser && /suspensa|suspenso/i.test(e.message || '')) {
       toast(e.message, 'error', 8000);
@@ -211,21 +214,28 @@ const DB = {
   },
   set(key, val) {
     try {
+      const previous = key === 'users' ? this.get('users', []) : null;
       localStorage.setItem('emma_' + key, JSON.stringify(val));
-      // Espelhamento no GitHub ocorre apenas por ação autenticada de administrador.
-      // O perfil só sincroniza os campos editáveis do próprio usuário.
+      // Sincroniza o perfil apenas quando um campo editável realmente mudou.
+      // Isso impede o ciclo Realtime -> leitura -> gravação -> Realtime.
       if (key === 'users' && emmaSupabase) {
         const myId = localStorage.getItem('emma_current_user');
         const me = Array.isArray(val) ? val.find(u => u.id === myId) : null;
-        if (me) emmaSupabase.from('profiles').update({
+        const before = Array.isArray(previous) ? previous.find(u => u.id === myId) : null;
+        const changed = me && (!before ||
+          (me.userType || 'player') !== (before.userType || 'player') ||
+          (me.gender || 'other') !== (before.gender || 'other') ||
+          (me.chatPreference || 'both') !== (before.chatPreference || 'both') ||
+          (me.avatar || null) !== (before.avatar || null) ||
+          !!me.allowBotTakeover !== !!before.allowBotTakeover);
+        if (changed) emmaSupabase.from('profiles').update({
           user_type: me.userType || 'player', gender: me.gender || 'other',
           chat_preference: me.chatPreference || 'both', avatar: me.avatar || null,
           allow_bot_takeover: !!me.allowBotTakeover
         }).eq('id', myId).then(({error}) => { if (error) console.warn('Profile sync:', error.message); });
       }
     } catch {}
-  }
-};
+  }};
 
 // ─── CONFIG DEFAULT ──────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
