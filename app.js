@@ -831,7 +831,7 @@ function adminResetPassword(userId) {
       <div class="modal-title">🔑 Redefinir Senha</div>
       <div class="field">
         <label>Nova senha</label>
-        <input type="text" class="input" id="admin-new-pass" placeholder="Nova senha (mín. 4 caracteres)">
+        <input type="text" class="input" id="admin-new-pass" placeholder="Nova senha (mín. 12 caracteres)" minlength="12" maxlength="72" autocomplete="new-password">
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
@@ -844,7 +844,7 @@ function adminResetPassword(userId) {
 
 async function confirmAdminReset(userId, btn) {
   const newPass = el('admin-new-pass').value.trim();
-  if (!newPass || newPass.length < 6 || newPass.length > 72) return toast('A senha precisa ter entre 6 e 72 caracteres.', 'error');
+  if (!newPass || newPass.length < 12 || newPass.length > 72) return toast('A senha precisa ter entre 12 e 72 caracteres.', 'error');
   try { await emmaApi('admin_reset_password', {userId, password:newPass}); btn.closest('.modal-overlay').remove(); toast('Senha redefinida no Supabase Auth.', 'success'); }
   catch(e) { toast(e.message, 'error'); }
 }
