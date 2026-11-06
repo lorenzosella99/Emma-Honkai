@@ -189,17 +189,10 @@
   <!-- Messages -->
   <div id="chat-messages" class="chat-messages" style="flex:1"></div>
 
-  <!-- Message type selector -->
-  <div class="thought-toggle">
-    <button id="btn-type-speech" class="thought-btn active-speech" onclick="setMessageType('speech')">
-      🗣️ Fala
-    </button>
-    <button id="btn-type-action" class="thought-btn" onclick="setMessageType('action')">
-      ✦ Ação
-    </button>
-    <button id="btn-type-thought" class="thought-btn" onclick="setMessageType('thought')">
-      🧠 Pensamento
-    </button>
+  <!-- Instruções de formatação das mensagens -->
+  <div class="chat-format-hint" role="note">
+    Para falar, apenas digite. Para ações, use * no início e no final.
+    Para pensamentos, use " no início e no final ou &lt; no início e &gt; no final.
   </div>
   <div class="thought-cost-hint">
     <span class="cost-pill">🗣️ <span id="cost-speech">0</span>🪙</span>
