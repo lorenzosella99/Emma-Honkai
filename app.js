@@ -1202,7 +1202,7 @@ function _renderCharsContent(pref) {
   if (gpPlayers) {
     gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
     emmaApi("creator_directory",{}).then(({creators=[]})=>{
-      const filtered=creators.filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+      const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
       renderPlayerGrid(gpPlayers,filtered);
     }).catch(()=>{gpPlayers.innerHTML='<div class="admin-row-sub">Não foi possível carregar os criadores.</div>';});
   }
@@ -1262,7 +1262,7 @@ async function toggleCreatorFollow(userId,follow) {
     const target=creators.find(c=>c.userId===userId);
     if(target)toast(target.mutual?"Seguimento mútuo! Detalhes liberados.":(follow?"Você está seguindo o criador.":"Você deixou de seguir."),"success");
     const pref=state.currentUser.chatPreference||"both",category=state.characterFilter||"normal";
-    const filtered=creators.filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+    const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
     renderPlayerGrid(el("chars-grid-players"),filtered);
   } catch(e) { toast(e.message||"Não foi possível atualizar o seguimento.","error"); }
 }
@@ -2093,6 +2093,7 @@ async function claimMission(missionId, event) {
     const rect = event.target.getBoundingClientRect();
     coinFly(result.reward, rect.left, rect.top);
     toast(`+${result.reward}🪙 +${result.xpReward||0} XP — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
+    if(result.premiumReward)toast("Nível 99 alcançado! Você recebeu 5 dias de Emma Premium grátis.","gold",5000);
     updateCoinsDisplay(); switchTab('missions'); updateNavBadges();
   } catch(e) { toast(e.message || 'Não foi possível resgatar a missão.', 'error'); }
 }
