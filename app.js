@@ -2155,9 +2155,10 @@ function renderAdminPanel() {
     <!-- USERS -->
     <div class="admin-section">
       <div class="admin-section-header">👥 Usuários (${users.length})</div>
+      <input class="input" id="admin-user-filter" type="search" placeholder="Buscar usuário pelo nome..." aria-label="Buscar usuário pelo nome" style="width:100%;margin:8px 0 12px">
       <button class="btn btn-primary btn-sm" onclick="adminViewAllChats()">💬 Ver chats de todos os usuários</button>
       ${users.map(u => `
-        <div class="admin-row">
+        <div class="admin-row" data-admin-user="${escapeHtml(u.username).toLowerCase()}">
           <div class="admin-row-info">
             <div class="admin-row-name">${escapeHtml(u.username)} ${u.isAdmin ? '<span class="chip chip-red" style="font-size:.6rem">ADMIN</span>' : ''}</div>
             <div class="admin-row-sub">🪙 ${u.coins} · ${u.totalMessages||0} msgs · desde ${formatDate(u.joinDate)}</div>
@@ -2215,6 +2216,13 @@ function renderAdminPanel() {
 
     <div style="height:32px"></div>
   `;
+  const userFilter = el('admin-user-filter');
+  if (userFilter) userFilter.addEventListener('input', () => {
+    const query = userFilter.value.trim().toLocaleLowerCase('pt-BR');
+    container.querySelectorAll('[data-admin-user]').forEach(row => {
+      row.classList.toggle('hidden', !row.dataset.adminUser.includes(query));
+    });
+  });
 }
 
 async function adminSetUserRole(userId, role) {
