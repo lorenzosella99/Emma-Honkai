@@ -2564,19 +2564,65 @@ function showAddCharModal(editId = null) {
   document.body.appendChild(overlay);
 }
 
-function previewCharImg(input) {
-  const file = input.files[0];
+let charImageProcessing = false;
+
+async function previewCharImg(input) {
+  const file = input.files?.[0];
   if (!file) return;
-  if (file.size > 3 * 1024 * 1024) return toast('Imagem muito grande! Máx 3MB.', 'error');
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const base64 = e.target.result;
+  if (!file.type.startsWith('image/')) return toast('Selecione um arquivo de imagem.', 'error');
+  if (file.size > 5 * 1024 * 1024) return toast('Imagem muito grande! Máx. 5MB antes da compressão.', 'error');
+  charImageProcessing = true;
+  const saveButton = document.querySelector('.char-form-modal .modal-actions .btn-primary');
+  if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Compactando imagem…'; }
+  try {
+    const sourceUrl = URL.createObjectURL(file);
+    const image = new Image();
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.'));
+      image.src = sourceUrl;
+    });
+    const maxSide = 640;
+    let scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Seu navegador não conseguiu processar a imagem.');
+    let compacted = '';
+    for (let attempt = 0; attempt < 8; attempt++) {
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      for (const quality of [0.76, 0.66, 0.56, 0.46]) {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality));
+        if (!blob) continue;
+        if (blob.size <= 220 * 1024) {
+          compacted = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Falha ao preparar imagem.'));
+            reader.readAsDataURL(blob);
+          });
+          break;
+        }
+      }
+      if (compacted) break;
+      scale *= 0.82;
+    }
+    if (!compacted) throw new Error('Não foi possível reduzir a imagem para o limite de 220 KB.');
     const preview = el('cf-img-preview');
-    if (preview) preview.innerHTML = `<img src="${base64}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem" onclick="document.getElementById('cf-img-file').click()">✏️</div>`;
+    if (preview) preview.innerHTML = `<img src="${compacted}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem" onclick="document.getElementById('cf-img-file').click()">✏️</div>`;
     const urlInput = el('cf-image');
-    if (urlInput) urlInput.value = base64;
-  };
-  reader.readAsDataURL(file);
+    if (urlInput) urlInput.value = compacted;
+    toast('Imagem compactada em WebP e pronta para salvar.', 'success');
+    URL.revokeObjectURL(sourceUrl);
+  } catch (error) {
+    toast(error.message || 'Não foi possível compactar a imagem.', 'error');
+  } finally {
+    charImageProcessing = false;
+    if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Salvar'; }
+    input.value = '';
+  }
 }
 
 function syncCharImgUrl(input) {
@@ -2593,12 +2639,14 @@ function syncCharImgUrl(input) {
 function showEditCharModal(charId) { showAddCharModal(charId); }
 
 async function saveChar(editId, btn) {
+  if (charImageProcessing) return toast('Aguarde a compactação da imagem.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
   if (!name) return toast('Nome obrigatório.', 'error');
 
   const chars = DB.get('characters', []);
   const image = el('cf-image').value.trim();
+  if (/^data:image\//i.test(image) && (!/^data:image\/webp;base64,/i.test(image) || image.length > 310000)) return toast('A imagem precisa estar compactada em WebP e ter no máximo 220 KB.', 'error');
   const gender = getChipVal('cf-gender', 'other');
   const controlMode = ['bot','both','users'].includes(el('cf-control-mode')?.value) ? el('cf-control-mode').value : 'both';
 
