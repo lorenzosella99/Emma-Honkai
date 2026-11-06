@@ -20,12 +20,12 @@
 
 ## 🔑 Acesso
 
-| Código padrão | Tipo |
-|---|---|
-| `EMMA2024` | Acesso geral |
-| `ADMIN_EMMA99` | Admin |
+O cadastro exige um código de acesso válido, fornecido pelos canais oficiais do projeto. Códigos administrativos não são publicados neste repositório. Nunca compartilhe códigos privados, senhas ou tokens.
 
-> ⚠️ Mude os códigos no painel Admin após o primeiro acesso!
+## 📜 Políticas
+
+- [Política de Privacidade](POLITICA_DE_PRIVACIDADE.md)
+- [Política de Segurança](POLITICA_DE_SEGURANCA.md)
 
 ## 💬 Discord
 
