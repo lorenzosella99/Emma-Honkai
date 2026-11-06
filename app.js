@@ -75,7 +75,11 @@ let emmaSessionExpiring = false;
 function startEmmaSessionWindow() {
   if (!emmaSupabase) return false;
   let startedAt = Number(localStorage.getItem(EMMA_SESSION_STARTED_KEY));
-  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+  if (localStorage.getItem('emma_session_reload_required') === '1') {
+    localStorage.removeItem('emma_session_reload_required');
+    startedAt = Date.now();
+    localStorage.setItem(EMMA_SESSION_STARTED_KEY, String(startedAt));
+  } else if (!Number.isFinite(startedAt) || startedAt <= 0) {
     startedAt = Date.now();
     localStorage.setItem(EMMA_SESSION_STARTED_KEY, String(startedAt));
   }
@@ -93,13 +97,9 @@ async function expireEmmaSession() {
   if (emmaSessionExpiring) return;
   emmaSessionExpiring = true;
   clearTimeout(emmaSessionTimer);
-  localStorage.removeItem(EMMA_SESSION_STARTED_KEY);
-  localStorage.removeItem('emma_current_user');
-  localStorage.removeItem('emma_access_verified');
-  try { await emmaSupabase?.auth.signOut(); } catch {}
-  state.currentUser = null;
-  state.currentChat = null;
-  alert('Sua sessão foi expirada. Recarregue o site para entrar novamente.');
+  // Mantém a sessão persistida; a recarga inicia uma nova janela de 15 minutos.
+  localStorage.setItem('emma_session_reload_required', '1');
+  alert('Sua sessão chegou ao limite de 15 minutos. A página será recarregada para continuar conectado.');
   location.reload();
 }
 
