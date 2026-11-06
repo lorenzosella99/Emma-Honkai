@@ -221,9 +221,18 @@ async function loadEmmaBackendState() {
 
   // Mensagens são carregadas somente das conversas visíveis para a conta, evitando baixar o banco inteiro.
   const chatIds = chatsRows.map(c => c.id).filter(Boolean);
-  const messagesRows = chatIds.length
-    ? await fetchAllEmmaRows('messages', 'created_at', {columns:'id,chat_id,sender_user_id,sender_character_id,message_type,body,created_at,is_bot',in:['chat_id',chatIds]})
-    : [];
+  let messagesRows = [];
+  const messageColumns = 'id,chat_id,sender_user_id,sender_character_id,message_type,body,created_at,is_bot';
+  if (adminSession) {
+    messagesRows = await fetchAllEmmaRows('messages', 'created_at', {columns:messageColumns});
+  } else {
+    // Divide em pequenos lotes para evitar URLs enormes em contas com muitas conversas.
+    for (let i = 0; i < chatIds.length; i += 100) {
+      messagesRows.push(...await fetchAllEmmaRows('messages', 'created_at', {
+        columns:messageColumns, in:['chat_id',chatIds.slice(i, i + 100)]
+      }));
+    }
+  }
 
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
