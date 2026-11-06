@@ -1555,59 +1555,67 @@ function removeTypingIndicator(node) {
 async function botRespond(typingEl = null, alreadyTyping = false) {
   if (state.isTyping && !alreadyTyping) return;
   state.isTyping = true;
+  let activeTypingEl = typingEl;
 
-  const char = state.currentChat.char;
-  const config = cfg();
-  const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
-  const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
-  if (owner && ownerOnline) { removeTypingIndicator(typingEl); state.isTyping = false; return; }
-  if (owner && !ownerOnline && !owner.allowBotTakeover) { removeTypingIndicator(typingEl); state.isTyping = false; return; }
-  const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
+  try {
+    const activeChat = state.currentChat;
+    const char = activeChat?.char;
+    if (!activeChat?.chatId || !char) return;
 
-  // O indicador aparece antes da gravação remota e permanece durante a geração.
-  if (!typingEl) typingEl = createTypingIndicator(char, state.currentChat.chatId);
-  await sleep(delay);
-  removeTypingIndicator(typingEl);
+    const config = cfg();
+    const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
+    const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
+    if (owner && ownerOnline) return;
+    if (owner && !ownerOnline && !owner.allowBotTakeover) return;
 
-  // Get last user message for context
-  const messages = DB.get('messages', {});
-  const chatHistory = messages[state.currentChat.chatId] || [];
-  const lastUserMsg = [...chatHistory].reverse().find(m => m.senderId === state.currentUser.id);
-  const userText = lastUserMsg ? lastUserMsg.text : '';
+    const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
+    if (!activeTypingEl) activeTypingEl = createTypingIndicator(char, activeChat.chatId);
+    await sleep(delay);
+    removeTypingIndicator(activeTypingEl);
+    activeTypingEl = null;
 
-  // Generate dynamic response based on personality + user message
-  const responses = generateBotResponse(char, userText, chatHistory, isPremiumActive());
+    // Se o usuário mudou de conversa durante a espera, não envia a resposta no chat errado.
+    if (state.currentChat?.chatId !== activeChat.chatId) return;
 
-  if (responses.length === 0) {
-    state.isTyping = false;
-    return;
-  }
+    const messages = DB.get('messages', {});
+    const chatHistory = messages[activeChat.chatId] || [];
+    const lastUserMsg = [...chatHistory].reverse().find(m => m.senderId === state.currentUser?.id);
+    const userText = lastUserMsg ? lastUserMsg.text : '';
+    const responses = generateBotResponse(char, userText, chatHistory, isPremiumActive());
+    const container = el('chat-messages');
 
-  for (let i = 0; i < responses.length; i++) {
-    const resp = responses[i];
-    const cost = resp.type === 'thought' ? config.thoughtCost : (resp.type === 'action' ? config.actionCost : 0);
-    const botMsg = {
-      id: 'm_' + Date.now() + '_' + i,
-      senderId: char.id,
-      chatId: state.currentChat.chatId,
-      type: resp.type,
-      text: resp.text,
-      timestamp: Date.now(),
-      cost: resp.type === 'thought' ? cost : 0,
-      isBot: true
-    };
+    if (!responses.length) return;
 
-    if (resp.type === 'thought') {
-      // Check if user wants to unlock the thought
-      await promptThoughtUnlock(botMsg, char, cost, container);
-    } else {
-      try { await addMessage(botMsg); }
-      catch (e) { console.warn('Bot message sync:', e); toast('A resposta não foi salva no servidor.', 'error'); break; }
-      if (i < responses.length - 1) await sleep(600 + Math.random() * 400);
+    for (let i = 0; i < responses.length; i++) {
+      if (state.currentChat?.chatId !== activeChat.chatId) break;
+      const resp = responses[i];
+      const cost = resp.type === 'thought' ? config.thoughtCost : (resp.type === 'action' ? config.actionCost : 0);
+      const botMsg = {
+        id: 'm_' + Date.now() + '_' + i,
+        senderId: char.id,
+        chatId: activeChat.chatId,
+        type: resp.type,
+        text: resp.text,
+        timestamp: Date.now(),
+        cost: resp.type === 'thought' ? cost : 0,
+        isBot: true
+      };
+
+      if (resp.type === 'thought') {
+        // O elemento do chat é obtido explicitamente; nunca depende de variável global inexistente.
+        if (container) await promptThoughtUnlock(botMsg, char, cost, container);
+      } else {
+        await addMessage(botMsg);
+        if (i < responses.length - 1) await sleep(600 + Math.random() * 400);
+      }
     }
+  } catch (e) {
+    console.error('Falha ao gerar resposta da Emma:', e);
+    toast('A Emma teve um problema ao responder. Tente enviar outra mensagem.', 'error');
+  } finally {
+    removeTypingIndicator(activeTypingEl);
+    state.isTyping = false;
   }
-
-  state.isTyping = false;
 }
 
 async function promptThoughtUnlock(msg, char, cost, container) {
