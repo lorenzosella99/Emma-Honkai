@@ -1408,26 +1408,20 @@ function renderMessage(msg) {
     </div>
   ` : '';
 
-  let typeLabel = '';
   let bubbleClass = isUser ? 'user-msg' : 'char';
   let costHtml = '';
 
-  if (!isUser) {
-    if (msg.type === 'thought') {
-      bubbleClass = 'thought';
-      typeLabel = `<div class="msg-type-label thought">🧠 Pensamento</div>`;
-      costHtml = msg.cost ? `<div class="msg-cost">🪙 ${msg.cost}</div>` : '';
-    } else if (msg.type === 'action') {
-      bubbleClass = 'action';
-      typeLabel = `<div class="msg-type-label action">✦ Ação</div>`;
-    }
+  if (msg.type === 'thought') {
+    bubbleClass = 'thought';
+    costHtml = msg.cost ? `<div class="msg-cost">🪙 ${msg.cost}</div>` : '';
+  } else if (msg.type === 'action') {
+    bubbleClass = 'action';
   }
 
   return `
     <div class="msg-row ${isUser ? 'user' : ''}">
       ${avatarHtml}
       <div class="msg-bubble-wrap">
-        ${typeLabel}
         <div class="msg-bubble ${bubbleClass}">${escapeHtml(msg.text)}</div>
         <div class="flex gap-2 items-center">
           <div class="msg-time">${timeAgo(msg.timestamp)}</div>
@@ -1805,7 +1799,7 @@ function renderProfileTab(container) {
         <div class="profile-username">${escapeHtml(user.username)} ${user.isAdmin ? '<span class="chip chip-red">ADMIN</span>' : ''}</div>
         <div class="profile-joined">Desde ${formatDate(user.joinDate)}</div>
         <div style="display:flex;gap:6px;justify-content:center;margin-top:6px;flex-wrap:wrap">
-          <span class="chip">${typeLabel}</span>
+          <span class="chip"></span>
           <span class="chip">${genderLabel}</span>
           ${user.isAnonymous ? '<span class="chip">👤 Anônimo</span>' : ""}
           <span class="chip">🔍 ${prefLabel}</span>
