@@ -1639,18 +1639,49 @@ function openDiscordHistoryImport(){
  modal.innerHTML=`<div style="background:#171827;border:1px solid #39334e;border-radius:16px;padding:18px;width:min(680px,100%);max-height:92vh;overflow:auto;color:#f4f0ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 style="margin:0">📥 Importar histórico do Discord</h2><button class="btn btn-secondary btn-sm" onclick="document.getElementById('discord-import-modal').remove()">Fechar</button></div><p style="color:#b8b3c8;font-size:.88rem">Cole o histórico. Formato: <b>Nome: mensagem</b>. Use *texto* (um asterisco no início e outro no final) para ações e ((texto)) para pensamentos.</p><textarea id="discord-history-raw" class="input" rows="9" style="width:100%;resize:vertical" placeholder="Lorenzo: Oi!&#10;Kafka: *sorri de lado*&#10;Kafka: Olá.&#10;Kafka: ((Será interessante...))"></textarea><button class="btn btn-primary btn-full" style="margin-top:10px" onclick="analyzeDiscordHistory()">Analisar participantes</button><div id="discord-import-step2" style="margin-top:14px"></div></div>`;
  document.body.appendChild(modal);
 }
-function analyzeDiscordHistory(){
- const entries=parseDiscordHistory(document.getElementById('discord-history-raw')?.value||'');if(!entries.length)return toast('Não encontrei mensagens. Use o formato Nome: mensagem.','error');if(entries.length>500)return toast('Importe no máximo 500 mensagens por vez.','error');
- const speakers=[...new Set(entries.map(e=>e.speaker))];discordImportDraft={entries,speakers};const chars=DB.get('characters',[]),chats=DB.get('chats',[]).filter(c=>c.userId===state.currentUser.id);
- const opts='<option value="">— Escolher personagem —</option>'+chars.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.name)+'</option>').join('');
- const chatOpts=chats.map(c=>{const ch=chars.find(x=>x.id===c.charId);return '<option value="'+escapeHtml(c.id)+'">'+escapeHtml(ch?.name||c.charId)+'</option>';}).join('');
+async function analyzeDiscordHistory(){
+ const entries=parseDiscordHistory(document.getElementById('discord-history-raw')?.value||'');
+ if(!entries.length)return toast('Não encontrei mensagens. Confira os nomes e as datas do histórico.','error');
+ if(entries.length>500)return toast('Importe no máximo 500 mensagens por vez.','error');
+ const speakers=[...new Set(entries.map(e=>e.speaker))];
+ discordImportDraft={entries,speakers,options:null};
  const area=document.getElementById('discord-import-step2');
- area.innerHTML=`<h3>Quem é cada participante?</h3><p style="color:#b8b3c8;font-size:.85rem">O Emma separou ${entries.length} mensagens. Associe cada pessoa a você ou a um personagem.</p><label>Chat privado de destino</label><select id="discord-import-chat" class="input" style="width:100%;margin:6px 0 12px">${chatOpts}</select><div style="display:grid;gap:10px">${speakers.map(sp=>'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center"><b>'+escapeHtml(sp)+'</b><select class="input discord-speaker-map" data-speaker="'+escapeHtml(sp)+'"><option value="__self">Eu / jogador</option>'+opts+'</select></div>').join('')}</div><div style="margin-top:12px;padding:10px;background:#222238;border-radius:10px;font-size:.85rem">🧠 ${entries.filter(e=>e.type==='thought').length} pensamento(s). Só serão importados se sua assinatura estiver ativa.</div><button class="btn btn-primary btn-full" style="margin-top:12px" onclick="confirmDiscordHistoryImport()">Importar mensagens</button>`;
- if(!chats.length)area.innerHTML+='<p style="color:#ffbd6b">Você ainda não tem chats privados. Abra um personagem e crie um chat antes de importar.</p>';
+ area.innerHTML='<p>Carregando usuários e personagens cadastrados...</p>';
+ try{
+  const options=await emmaApi('discord_import_options');
+  discordImportDraft.options=options;
+  const chars=DB.get('characters',[]),chats=DB.get('chats',[]).filter(c=>c.userId===state.currentUser.id);
+  const chatOpts=chats.map(c=>{const ch=chars.find(x=>x.id===c.charId);return '<option value="'+escapeHtml(c.id)+'">'+escapeHtml(ch?.name||c.charId)+'</option>';}).join('');
+  const userOpts='<option value="">— Escolher usuário do Emma —</option>'+options.users.map(u=>'<option value="'+escapeHtml(u.id)+'">'+escapeHtml(u.username||u.id)+'</option>').join('');
+  area.innerHTML='<h3>Associe cada participante</h3><p style="color:#b8b3c8;font-size:.85rem">Foram encontradas '+entries.length+' mensagens e '+speakers.length+' participantes. Para cada nome do Discord, escolha a conta do Emma e depois o personagem que ela interpreta.</p><label>Chat privado de destino</label><select id="discord-import-chat" class="input" style="width:100%;margin:6px 0 12px">'+chatOpts+'</select><div style="display:grid;gap:12px">'+speakers.map((sp,i)=>'<div style="padding:10px;background:#222238;border-radius:10px;display:grid;gap:7px"><b>'+escapeHtml(sp)+'</b><label>Qual usuário do Emma é '+escapeHtml(sp)+'?</label><select class="input discord-user-map" data-index="'+i+'" onchange="updateDiscordCharacterChoices('+i+')">'+userOpts+'</select><label>Qual personagem esse usuário interpreta?</label><select class="input discord-character-map" data-index="'+i+'"><option value="">— Escolha primeiro o usuário —</option></select></div>').join('')+'</div><div style="margin-top:12px;padding:10px;background:#222238;border-radius:10px;font-size:.85rem">🧠 '+entries.filter(e=>e.type==='thought').length+' pensamento(s). Só serão importados se sua assinatura estiver ativa.</div><button class="btn btn-primary btn-full" style="margin-top:12px" onclick="confirmDiscordHistoryImport()">Importar mensagens</button>';
+  if(!chats.length)area.innerHTML+='<p style="color:#ffbd6b">Você ainda não tem chats privados. Abra um personagem e crie um chat antes de importar.</p>';
+ }catch(e){area.innerHTML='<p style="color:#ff9b9b">Não foi possível carregar os usuários e personagens: '+escapeHtml(e.message)+'</p>';}
+}
+function updateDiscordCharacterChoices(index){
+ const userId=document.querySelector('.discord-user-map[data-index="'+index+'"]')?.value;
+ const select=document.querySelector('.discord-character-map[data-index="'+index+'"]');
+ if(!select)return;
+ const opts=discordImportDraft?.options||{};
+ const user=(opts.users||[]).find(u=>u.id===userId);
+ const chars=(opts.characters||[]).filter(c=>userId&&(c.owner_user_id===userId||user?.assigned_character_id===c.id));
+ select.innerHTML='<option value="">— Esse usuário é o jogador, sem personagem —</option>'+chars.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.name)+'</option>').join('');
 }
 async function confirmDiscordHistoryImport(){
- const chatId=document.getElementById('discord-import-chat')?.value;if(!chatId)return toast('Escolha um chat privado de destino.','error');const mapping={};document.querySelectorAll('.discord-speaker-map').forEach(s=>mapping[s.dataset.speaker]=s.value);if(Object.values(mapping).some(v=>!v))return toast('Associe todos os participantes.','error');
- try{const result=await emmaApi('import_discord_history',{chatId,entries:discordImportDraft.entries.map(e=>({speaker:e.speaker,text:e.text,type:e.type,sender:mapping[e.speaker]}))});await loadEmmaBackendState();document.getElementById('discord-import-modal')?.remove();toast('Importadas '+result.imported+' mensagens.'+(result.skippedThoughts?' '+result.skippedThoughts+' pensamento(s) ignorado(s): assinatura inativa.':''),'success',7000);if(state.currentChat?.chatId===chatId)loadMessages();if(state.currentTab==='profile')switchTab('profile');}catch(e){toast('Falha ao importar: '+e.message,'error',8000);}
+ const chatId=document.getElementById('discord-import-chat')?.value;
+ if(!chatId)return toast('Escolha um chat privado de destino.','error');
+ const mapping={};let invalid=false;
+ document.querySelectorAll('.discord-user-map').forEach(s=>{
+  const i=Number(s.dataset.index),char=document.querySelector('.discord-character-map[data-index="'+i+'"]')?.value;
+  if(!s.value)invalid=true;
+  mapping[discordImportDraft.speakers[i]]={userId:s.value,characterId:char||null};
+ });
+ if(invalid)return toast('Escolha um usuário do Emma para cada participante.','error');
+ try{
+  const result=await emmaApi('import_discord_history',{chatId,mappings:mapping,entries:discordImportDraft.entries.map(e=>({speaker:e.speaker,text:e.text,type:e.type}))});
+  await loadEmmaBackendState();document.getElementById('discord-import-modal')?.remove();
+  toast('Importadas '+result.imported+' mensagens.'+(result.skippedThoughts?' '+result.skippedThoughts+' pensamento(s) ignorado(s): assinatura inativa.':''),'success',7000);
+  if(state.currentChat?.chatId===chatId)loadMessages();if(state.currentTab==='profile')switchTab('profile');
+ }catch(e){toast('Falha ao importar: '+e.message,'error',8000);}
 }
 
 async function requestCharacterRole() {
