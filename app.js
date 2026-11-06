@@ -1556,58 +1556,65 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
   if (state.isTyping && !alreadyTyping) return;
   state.isTyping = true;
   let activeTypingEl = typingEl;
-
+  const activeChat = state.currentChat;
+  const char = activeChat?.char;
   try {
-    const activeChat = state.currentChat;
-    const char = activeChat?.char;
     if (!activeChat?.chatId || !char) return;
-
     const config = cfg();
     const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
     const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
-    if (owner && ownerOnline) return;
-    if (owner && !ownerOnline && !owner.allowBotTakeover) return;
+    if (owner && (ownerOnline || !owner.allowBotTakeover)) return;
 
     const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
     if (!activeTypingEl) activeTypingEl = createTypingIndicator(char, activeChat.chatId);
     await sleep(delay);
     removeTypingIndicator(activeTypingEl);
     activeTypingEl = null;
-
-    // Se o usuário mudou de conversa durante a espera, não envia a resposta no chat errado.
     if (state.currentChat?.chatId !== activeChat.chatId) return;
 
-    const messages = DB.get('messages', {});
-    const chatHistory = messages[activeChat.chatId] || [];
+    const chatHistory = DB.get('messages', {})[activeChat.chatId] || [];
     const lastUserMsg = [...chatHistory].reverse().find(m => m.senderId === state.currentUser?.id);
-    const userText = lastUserMsg ? lastUserMsg.text : '';
-    const responses = generateBotResponse(char, userText, chatHistory, isPremiumActive());
+    const userText = lastUserMsg?.text || '';
+    let responses;
+    try {
+      responses = generateBotResponse(char, userText, chatHistory, isPremiumActive()) || [];
+    } catch (generationError) {
+      console.error('Falha na biblioteca de respostas:', generationError);
+      responses = [];
+    }
+
+    // A fala é obrigatória e vem primeiro; pensamentos/ações nunca podem impedir a resposta principal.
+    let speech = responses.find(r => r?.type === 'speech' && String(r.text || '').trim());
+    if (!speech) {
+      const fallback = ['Estou aqui. Pode continuar, quero ouvir você.', 'Entendi. Me conta um pouco mais sobre isso.', 'Interessante... quero saber o que você pensa sobre isso.'];
+      speech = { type: 'speech', text: fallback[Math.floor(Math.random() * fallback.length)] };
+    }
+    const ordered = [speech, ...responses.filter(r => r !== speech && ['action','thought'].includes(r?.type))];
     const container = el('chat-messages');
 
-    if (!responses.length) return;
-
-    for (let i = 0; i < responses.length; i++) {
+    for (let i = 0; i < ordered.length; i++) {
       if (state.currentChat?.chatId !== activeChat.chatId) break;
-      const resp = responses[i];
-      const cost = resp.type === 'thought' ? config.thoughtCost : (resp.type === 'action' ? config.actionCost : 0);
+      const resp = ordered[i];
       const botMsg = {
-        id: 'm_' + Date.now() + '_' + i,
-        senderId: char.id,
-        chatId: activeChat.chatId,
-        type: resp.type,
-        text: resp.text,
-        timestamp: Date.now(),
-        cost: resp.type === 'thought' ? cost : 0,
-        isBot: true
+        id: 'm_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2,6),
+        senderId: char.id, chatId: activeChat.chatId, type: resp.type,
+        text: String(resp.text || '').slice(0,4000), timestamp: Date.now(),
+        cost: resp.type === 'thought' ? config.thoughtCost : 0, isBot: true
       };
-
-      if (resp.type === 'thought') {
-        // O elemento do chat é obtido explicitamente; nunca depende de variável global inexistente.
-        if (container) await promptThoughtUnlock(botMsg, char, cost, container);
-      } else {
-        await addMessage(botMsg);
-        if (i < responses.length - 1) await sleep(600 + Math.random() * 400);
+      try {
+        if (resp.type === 'thought') {
+          if (container) await promptThoughtUnlock(botMsg, char, config.thoughtCost, container);
+        } else {
+          await addMessage(botMsg);
+        }
+      } catch (sendError) {
+        console.error('Falha ao enviar parte da resposta da Emma:', resp.type, sendError);
+        if (resp.type === 'speech') {
+          toast('A Emma não conseguiu salvar a resposta. Atualize a conversa e tente novamente.', 'error');
+          break;
+        }
       }
+      if (i < ordered.length - 1) await sleep(450);
     }
   } catch (e) {
     console.error('Falha ao gerar resposta da Emma:', e);
