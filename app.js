@@ -1422,7 +1422,7 @@ function renderMessage(msg) {
     <div class="msg-row ${isUser ? 'user' : ''}">
       ${avatarHtml}
       <div class="msg-bubble-wrap">
-        <div class="msg-bubble ${bubbleClass}">${escapeHtml(msg.text)}</div>
+        <div class="msg-bubble ${bubbleClass}">${formatMessageContent(msg)}</div>
         <div class="flex gap-2 items-center">
           <div class="msg-time">${timeAgo(msg.timestamp)}</div>
           ${costHtml}
@@ -1430,6 +1430,29 @@ function renderMessage(msg) {
       </div>
     </div>
   `;
+}
+
+function formatMessageContent(msg) {
+  const raw = String(msg?.text ?? '');
+  const type = msg?.type || msg?.message_type || 'speech';
+
+  // Compatibilidade: também reconhece marcações literais vindas da resposta da IA.
+  if (type === 'action' || (raw.startsWith('*') && raw.endsWith('*') && raw.length > 1)) {
+    const content = type === 'action' && !(raw.startsWith('*') && raw.endsWith('*'))
+      ? raw : raw.slice(1, -1);
+    return '<strong><em>' + escapeHtml(content.trim()) + '</em></strong>';
+  }
+
+  if (type === 'thought' ||
+      ((raw.startsWith('"') && raw.endsWith('"')) ||
+       (raw.startsWith('<') && raw.endsWith('>')))) {
+    const marked = (raw.startsWith('"') && raw.endsWith('"')) ||
+      (raw.startsWith('<') && raw.endsWith('>'));
+    const content = marked ? raw.slice(1, -1) : raw;
+    return '<span class="thought-text">' + escapeHtml(content.trim()) + '</span>';
+  }
+
+  return escapeHtml(raw);
 }
 
 function escapeHtml(value) {
