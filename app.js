@@ -57,7 +57,16 @@ async function emmaAuthRequest(action, payload) {
 async function emmaApi(action, payload = {}) {
   if (!emmaSupabase) throw new Error('O serviço de autenticação não carregou. Atualize a página.');
   const { data, error } = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
-  if (error) throw new Error(data?.error || error.message || 'Erro no servidor.');
+  if (error) {
+    let message = data?.error || '';
+    if (!message && error.context && typeof error.context.clone === 'function') {
+      try {
+        const detail = await error.context.clone().json();
+        message = detail?.error || detail?.message || '';
+      } catch (_) {}
+    }
+    throw new Error(message || error.message || 'Erro no servidor.');
+  }
   if (data?.error) throw new Error(data.error);
   return data;
 }
