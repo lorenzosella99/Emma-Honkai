@@ -1596,17 +1596,37 @@ function renderProfileTab(container) {
 
 let discordImportDraft=null;
 function parseDiscordHistory(raw){
- const lines=String(raw||'').replace(/\r/g,'').split('\n');const out=[];let cur=null;
+ const lines=String(raw||'').replace(/\r/g,'').split('\n');const out=[];let cur=null,pendingSpeaker=null;
+ const dateRe=/(\d{1,2}\/\d{1,2}\/\d{4},\s*\d{1,2}:\d{2})/;
  const pats=[/^\[[^\]]+\]\s*([^:]{1,100}):\s*(.*)$/,/^\d{4}-\d{2}-\d{2}[^-]*-\s*([^:]{1,100}):\s*(.*)$/,/^(?:\[[^\]]+\]\s*)?([^:]{1,80}):\s+(.*)$/];
- for(const line of lines){
-  const heading=line.match(/^###\s*(.*?)\s*(\d{1,2}\/\d{1,2}\/\d{4},\s*\d{1,2}:\d{2})\s*$/);
-  if(heading){if(cur)out.push(cur);cur={speaker:heading[1].trim(),text:''};continue;}
-  if(/^\s*\d+\.\s*$/.test(line))continue;
+ const finish=()=>{if(cur){out.push(cur);cur=null;}};
+ for(const original of lines){
+  const line=original.trim();
+  if(!line)continue;
+  if(/^\d+\.\s*$/.test(line))continue;
+  const h=line.match(/^###\s*(.+?)\s*$/);
+  if(h){
+   finish();
+   const rawName=h[1].trim(),dm=rawName.match(dateRe);
+   if(dm){const name=rawName.slice(0,dm.index).trim();if(name)cur={speaker:name,text:''};pendingSpeaker=null;}
+   else pendingSpeaker=rawName;
+   continue;
+  }
+  if(pendingSpeaker){
+   const dm=line.match(dateRe);
+   if(dm&&line.replace(dm[0],'').trim()===''){
+    cur={speaker:pendingSpeaker,text:''};pendingSpeaker=null;continue;
+   }
+   cur={speaker:pendingSpeaker,text:''};pendingSpeaker=null;
+  }
   const m=pats.map(p=>line.match(p)).find(Boolean);
-  if(m){if(cur)out.push(cur);cur={speaker:m[1].trim(),text:m[2].trim()};}
-  else if(cur&&line.trim())cur.text+=(cur.text?'\n':'')+line.trim();
+  if(m){finish();cur={speaker:m[1].trim(),text:m[2].trim()};continue;}
+  if(cur){
+   const content=line.replace(/^\d+\.\s+/,'').trim();
+   if(content)cur.text+=(cur.text?'\n':'')+content;
+  }
  }
- if(cur)out.push(cur);
+ finish();
  return out.filter(x=>x.speaker&&x.text).map(x=>{let type='speech',text=x.text;
   if(/^\*(?!\*)([\s\S]*?)(?<!\*)\*$/.test(text)){type='action';text=text.slice(1,-1).trim();}
   else if(/^\(\([\s\S]*\)\)$/.test(text)||/^\[pensamento\]/i.test(text)){type='thought';text=text.replace(/^\(\(|\)\)$|^\[pensamento\]\s*/gi,'').trim();}
