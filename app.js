@@ -1596,11 +1596,11 @@ function renderProfileTab(container) {
 
 let discordImportDraft=null;
 function parseDiscordHistory(raw){
- const lines=String(raw||'').replace(/\\r/g,'').split('\\n');const out=[];let cur=null;
- const pats=[/^\\[(?:\\d{1,4}[\\/-])?[^\\]]+\\]\\s*([^:]{1,100}):\\s*(.*)$/,/^(?:\\[[^\\]]+\\]\\s*)?([^:]{1,80}):\\s+(.*)$/];
- for(const line of lines){const m=pats.map(p=>line.match(p)).find(Boolean);if(m){if(cur)out.push(cur);cur={speaker:m[1].trim(),text:m[2].trim()};}else if(cur&&line.trim())cur.text+='\\n'+line.trim();}
+ const lines=String(raw||'').replace(/\r/g,'').split('\n');const out=[];let cur=null;
+ const pats=[/^\[[^\]]+\]\s*([^:]{1,100}):\s*(.*)$/,/^\d{4}-\d{2}-\d{2}[^-]*-\s*([^:]{1,100}):\s*(.*)$/,/^(?:\[[^\]]+\]\s*)?([^:]{1,80}):\s+(.*)$/];
+ for(const line of lines){const m=pats.map(p=>line.match(p)).find(Boolean);if(m){if(cur)out.push(cur);cur={speaker:m[1].trim(),text:m[2].trim()};}else if(cur&&line.trim())cur.text+='\n'+line.trim();}
  if(cur)out.push(cur);
- return out.filter(x=>x.speaker&&x.text).map(x=>{let type='speech',text=x.text;if(/^\\*\\*.*\\*\\*$/.test(text)||/^\\*.*\\*$/.test(text)||/^_.*_$/.test(text)){type='action';text=text.replace(/^\\*+|\\*+$|^_+|_+$/g,'').trim();}else if(/^\\(\\(.*\\)\\)$/.test(text)||/^\\[pensamento\\]/i.test(text)){type='thought';text=text.replace(/^\\(\\(|\\)\\)$|^\\[pensamento\\]\\s*/gi,'').trim();}else if(/^\\[ação\\]/i.test(text)){type='action';text=text.replace(/^\\[ação\\]\\s*/i,'').trim();}return {...x,text,type};});
+ return out.filter(x=>x.speaker&&x.text).map(x=>{let type='speech',text=x.text;if(/^\*\*.*\*\*$/.test(text)||/^\*.*\*$/.test(text)||/^_.*_$/.test(text)){type='action';text=text.replace(/^\*+|\*+$|^_+|_+$/g,'').trim();}else if(/^\(\(.*\)\)$/.test(text)||/^\[pensamento\]/i.test(text)){type='thought';text=text.replace(/^\(\(|\)\)$|^\[pensamento\]\s*/gi,'').trim();}else if(/^\[ação\]/i.test(text)){type='action';text=text.replace(/^\[ação\]\s*/i,'').trim();}return {...x,text,type};});
 }
 function openDiscordHistoryImport(){
  const modal=document.createElement('div');modal.id='discord-import-modal';modal.style.cssText='position:fixed;inset:0;z-index:9999;background:#080910ee;display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto';
