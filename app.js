@@ -831,7 +831,7 @@ function adminResetPassword(userId) {
       <div class="modal-title">🔑 Redefinir Senha</div>
       <div class="field">
         <label>Nova senha</label>
-        <input type="text" class="input" id="admin-new-pass" placeholder="Nova senha (mín. 12 caracteres)" minlength="12" maxlength="72" autocomplete="new-password">
+        <input type="password" class="input" id="admin-new-pass" placeholder="Nova senha (mín. 12 caracteres)" minlength="12" maxlength="72" autocomplete="new-password">
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
