@@ -1206,7 +1206,13 @@ async function openChat(charId) {
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
   const avatar = el('chat-char-avatar-img'); avatar.src = char.image || ''; avatar.alt = char.name;
-  el('chat-messages').innerHTML = chatSkeletonMarkup();
+  el('chat-input').disabled = true;
+  el('chat-input').placeholder = 'Carregando conversa...';
+  const sendButton = document.querySelector('.chat-send-btn');
+  if (sendButton) sendButton.disabled = true;
+  const messageArea = el('chat-messages');
+  messageArea.setAttribute('aria-busy', 'true');
+  messageArea.innerHTML = chatSkeletonMarkup();
   showScreen('screen-chat');
   try {
     const result = await emmaApi('create_chat', { characterId: charId });
@@ -1219,6 +1225,10 @@ async function openChat(charId) {
     chats.push(chat); DB.set('chats', chats);
     state.currentChat.chatId = chat.id;
     await emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chat.id);
+    el('chat-input').disabled = false;
+    el('chat-input').placeholder = 'Escreva algo...';
+    if (sendButton) sendButton.disabled = false;
+    messageArea.removeAttribute('aria-busy');
     renderChatScreen(char, chat);
   } catch(e) {
     if (state.currentChat?.charId === charId) {
