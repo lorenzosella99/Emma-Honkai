@@ -50,6 +50,7 @@ async function emmaAuthRequest(action, payload) {
       refresh_token: data.session.refresh_token
     });
     if (error) throw error;
+    startEmmaSessionWindow();
   }
   return data;
 }
