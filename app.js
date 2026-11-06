@@ -1199,9 +1199,18 @@ async function openChat(charId) {
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
   if (!char || char.isBanned) return;
-  state.currentChat = { charId, char };
+  const previousChat = state.currentChat;
+  const localChat = DB.get('chats', []).find(c => c.userId === state.currentUser.id && c.charId === charId);
+  state.currentChat = { charId, char, chatId: localChat?.id || null };
+  el('chat-char-name').textContent = char.name;
+  el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
+  el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
+  const avatar = el('chat-char-avatar-img'); avatar.src = char.image || ''; avatar.alt = char.name;
+  el('chat-messages').innerHTML = chatSkeletonMarkup();
+  showScreen('screen-chat');
   try {
     const result = await emmaApi('create_chat', { characterId: charId });
+    if (state.currentChat?.charId !== charId) return;
     const row = result.chat;
     const chat = { id:row.id, userId:row.user_id, charId:row.character_id,
       createdAt:Date.parse(row.created_at), lastMessage:row.last_message || '',
@@ -1210,8 +1219,13 @@ async function openChat(charId) {
     chats.push(chat); DB.set('chats', chats);
     state.currentChat.chatId = chat.id;
     await emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chat.id);
-    renderChatScreen(char, chat); showScreen('screen-chat');
-  } catch(e) { toast(e.message || 'Não foi possível abrir a conversa.', 'error'); }
+    renderChatScreen(char, chat);
+  } catch(e) {
+    if (state.currentChat?.charId === charId) {
+      toast(e.message || 'Não foi possível abrir a conversa.', 'error');
+      showScreen('screen-home');
+    }
+  }
 }
 
 function renderChatScreen(char, chat) {
@@ -1243,6 +1257,15 @@ function loadMessages() {
   const chats = DB.get('chats', []);
   const chat = chats.find(c => c.id === state.currentChat.chatId);
   if (chat) { chat.unread = 0; DB.set('chats', chats); }
+}
+
+function chatSkeletonMarkup() {
+  return `
+    <div class="chat-skeleton-list" aria-label="Carregando conversa">
+      <div class="chat-skeleton-row"><div class="skeleton skel-avatar"></div><div class="chat-skeleton-bubble"><div class="skeleton skel-line" style="width:72%"></div><div class="skeleton skel-line-sm" style="width:46%"></div></div></div>
+      <div class="chat-skeleton-row user"><div class="chat-skeleton-bubble"><div class="skeleton skel-line" style="width:62%"></div><div class="skeleton skel-line-sm" style="width:38%"></div></div></div>
+      <div class="chat-skeleton-row"><div class="skeleton skel-avatar"></div><div class="chat-skeleton-bubble"><div class="skeleton skel-line" style="width:82%"></div><div class="skeleton skel-line-sm" style="width:52%"></div></div></div>
+    </div>`;
 }
 
 function renderMessages(messages) {
@@ -1323,9 +1346,14 @@ async function sendMessage() {
   if (state.currentChat?.char?.ownerUserId === state.currentUser.id) {
     const chatId = state.currentChat.chatId, type = state.messageType;
     input.value = ''; input.style.height = 'auto';
-    emmaApi('send_character_message', { chatId, text, type })
-      .then(async () => { await refreshEmmaBackendState(); if (state.currentChat?.chatId === chatId) loadMessages(); })
-      .catch(e => toast(e.message, 'error'));
+    const characterMsg = { id:'m_'+Date.now(), senderId:state.currentChat.charId, chatId, type, text, timestamp:Date.now(), isCharacterController:true };
+    try {
+      await addMessage(characterMsg);
+      await refreshEmmaBackendState();
+    } catch(e) {
+      input.value = text;
+      toast('A mensagem não foi enviada. ' + e.message, 'error');
+    }
     return;
   }
 
@@ -1353,6 +1381,12 @@ async function sendMessage() {
     timestamp: Date.now(),
     cost
   };
+  const currentChar = state.currentChat.char;
+  const owner = currentChar.ownerUserId ? DB.get('users', []).find(u => u.id === currentChar.ownerUserId) : null;
+  const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
+  const botWillRespond = !owner || (!ownerOnline && !!owner.allowBotTakeover);
+  const earlyTyping = botWillRespond ? createTypingIndicator(currentChar, userMsg.chatId) : null;
+  if (earlyTyping) state.isTyping = true;
   try {
     await addMessage(userMsg);
     if (userMsg.remoteResult?.coins !== undefined) {
@@ -1362,6 +1396,8 @@ async function sendMessage() {
     }
   }
   catch (e) {
+    removeTypingIndicator(earlyTyping);
+    if (earlyTyping) state.isTyping = false;
     input.value = text;
     toast('A mensagem não foi salva. Tente novamente: ' + e.message, 'error');
     return;
@@ -1383,47 +1419,43 @@ async function sendMessage() {
   if (type === 'thought') updateMissionProgress('thoughts_bought', user.thoughtsBought);
 
   // Bot response
-  await botRespond();
+  await botRespond(earlyTyping, !!earlyTyping);
 }
 
-async function botRespond() {
-  if (state.isTyping) return;
+function createTypingIndicator(char, chatId) {
+  const container = el('chat-messages');
+  if (!container || state.currentChat?.chatId !== chatId) return null;
+  const typingEl = document.createElement('div');
+  typingEl.id = 'typing_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  typingEl.className = 'msg-row';
+  typingEl.innerHTML = `
+    <div class="msg-avatar"><img src="${safeImageUrl(char.image)}" alt="" onerror="this.src=''"></div>
+    <div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
+  container.appendChild(typingEl);
+  container.scrollTop = container.scrollHeight;
+  return typingEl;
+}
+
+function removeTypingIndicator(node) {
+  if (node?.parentNode) node.remove();
+}
+
+async function botRespond(typingEl = null, alreadyTyping = false) {
+  if (state.isTyping && !alreadyTyping) return;
   state.isTyping = true;
 
   const char = state.currentChat.char;
   const config = cfg();
   const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
   const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
-  if (owner && ownerOnline) { state.isTyping = false; return; }
-  if (owner && !ownerOnline && !owner.allowBotTakeover) { state.isTyping = false; return; }
+  if (owner && ownerOnline) { removeTypingIndicator(typingEl); state.isTyping = false; return; }
+  if (owner && !ownerOnline && !owner.allowBotTakeover) { removeTypingIndicator(typingEl); state.isTyping = false; return; }
   const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
 
-  // Show typing indicator
-  const container = el('chat-messages');
-  const typingId = 'typing_' + Date.now();
-  const typingEl = document.createElement('div');
-  typingEl.id = typingId;
-  typingEl.className = 'msg-row';
-  typingEl.innerHTML = `
-    <div class="msg-avatar">
-      <img src="${safeImageUrl(char.image)}" alt="" onerror="this.src=''">
-    </div>
-    <div>
-      <div class="typing-indicator">
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-      </div>
-    </div>
-  `;
-  container.appendChild(typingEl);
-  container.scrollTop = container.scrollHeight;
-
+  // O indicador aparece antes da gravação remota e permanece durante a geração.
+  if (!typingEl) typingEl = createTypingIndicator(char, state.currentChat.chatId);
   await sleep(delay);
-
-  // Remove typing
-  const te = document.getElementById(typingId);
-  if (te) te.remove();
+  removeTypingIndicator(typingEl);
 
   // Get last user message for context
   const messages = DB.get('messages', {});
@@ -1543,7 +1575,9 @@ async function addMessage(msg) {
 
   // A gravação remota ocorre depois da renderização, sem bloquear a interface.
   try {
-    if (msg.isBot) {
+    if (msg.isCharacterController) {
+      msg.remoteResult = await emmaApi('send_character_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
+    } else if (msg.isBot) {
       msg.remoteResult = await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
     } else if (msg.senderId === state.currentUser.id) {
       msg.remoteResult = await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
