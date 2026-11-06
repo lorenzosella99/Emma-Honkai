@@ -66,7 +66,52 @@ async function emmaLegalRequest(action, payload = {}) {
   if (!response.ok) throw new Error(result.error || 'Não foi possível verificar as políticas.');
   return result;
 }
+const EMMA_SESSION_LIMIT_MS = 15 * 60 * 1000;
+const EMMA_SESSION_STARTED_KEY = 'emma_session_started_at';
+let emmaSessionTimer = null;
+let emmaSessionExpiring = false;
+
+function startEmmaSessionWindow() {
+  if (!emmaSupabase) return false;
+  let startedAt = Number(localStorage.getItem(EMMA_SESSION_STARTED_KEY));
+  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+    startedAt = Date.now();
+    localStorage.setItem(EMMA_SESSION_STARTED_KEY, String(startedAt));
+  }
+  const remaining = EMMA_SESSION_LIMIT_MS - (Date.now() - startedAt);
+  if (remaining <= 0) {
+    expireEmmaSession();
+    return false;
+  }
+  clearTimeout(emmaSessionTimer);
+  emmaSessionTimer = setTimeout(expireEmmaSession, remaining);
+  return true;
+}
+
+async function expireEmmaSession() {
+  if (emmaSessionExpiring) return;
+  emmaSessionExpiring = true;
+  clearTimeout(emmaSessionTimer);
+  localStorage.removeItem(EMMA_SESSION_STARTED_KEY);
+  localStorage.removeItem('emma_current_user');
+  localStorage.removeItem('emma_access_verified');
+  try { await emmaSupabase?.auth.signOut(); } catch {}
+  state.currentUser = null;
+  state.currentChat = null;
+  alert('Sua sessão foi expirada. Recarregue o site para entrar novamente.');
+  location.reload();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    if (localStorage.getItem(EMMA_SESSION_STARTED_KEY)) startEmmaSessionWindow();
+    if (emmaRefreshPending) scheduleEmmaBackendRefresh();
+    if (state.currentUser) updateUserPresence();
+  }
+});
+
 async function continueAfterAuthentication() {
+  if (!startEmmaSessionWindow()) return;
   const legal = await emmaLegalRequest('status');
   if (legal.required) { showScreen('screen-legal'); return; }
   await startApp();
@@ -87,6 +132,7 @@ async function acceptLegalPolicies(button) {
 }
 
 async function emmaApi(action, payload = {}) {
+  if (state.currentUser && localStorage.getItem(EMMA_SESSION_STARTED_KEY) && Date.now() - Number(localStorage.getItem(EMMA_SESSION_STARTED_KEY)) >= EMMA_SESSION_LIMIT_MS) { await expireEmmaSession(); throw new Error('Sessão expirada.'); }
   if (!emmaSupabase) throw new Error('O serviço de autenticação não carregou. Atualize a página.');
   const { data, error } = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
   if (error) {
@@ -133,11 +179,14 @@ function profileToAppUser(p) {
   };
 }
 
-async function fetchAllEmmaRows(table, orderBy = null) {
+async function fetchAllEmmaRows(table, orderBy = null, options = {}) {
   const rows = [];
   const pageSize = 500;
   for (let offset = 0; ; offset += pageSize) {
-    let query = emmaSupabase.from(table).select('*').range(offset, offset + pageSize - 1);
+    let query = emmaSupabase.from(table).select(options.columns || '*').range(offset, offset + pageSize - 1);
+    if (options.eq) query = query.eq(options.eq[0], options.eq[1]);
+    if (options.in) query = query.in(options.in[0], options.in[1]);
+    if (options.or) query = query.or(options.or);
     if (orderBy) query = query.order(orderBy, { ascending: true });
     const { data, error } = await query;
     if (error) throw error;
@@ -152,18 +201,30 @@ async function loadEmmaBackendState() {
   if (!sessionUserId) throw new Error('Sessão inválida.');
   const ownProfileResult = await emmaSupabase.from('profiles').select('*').eq('id', sessionUserId).maybeSingle();
   if (ownProfileResult.error || !ownProfileResult.data) throw (ownProfileResult.error || new Error('Perfil não encontrado.'));
-  const adminSession = state.currentUser?.isAdmin || ownProfileResult.data.role === 'admin';
-  const profileResult = adminSession ? await emmaApi('admin_list_profiles') : {data:[ownProfileResult.data]};
-  const profiles = adminSession ? (profileResult.profiles || []) : (profileResult.data || []);
-  const [charactersRows, chatsRows, messagesRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    fetchAllEmmaRows('characters'),
-    fetchAllEmmaRows('chats'),
-    fetchAllEmmaRows('messages', 'created_at'),
-    fetchAllEmmaRows('character_reports'),
-    fetchAllEmmaRows('character_applications'),
-    fetchAllEmmaRows('missions'),
+  const ownProfile = ownProfileResult.data;
+  const adminSession = state.currentUser?.isAdmin || ownProfile.role === 'admin';
+  const profileResult = adminSession ? await emmaApi('admin_list_profiles') : {profiles:[ownProfile]};
+  const profiles = adminSession ? (profileResult.profiles || []) : [ownProfile];
+  const assignedCharacterId = ownProfile.assigned_character_id || null;
+
+  // Busca só o necessário para a conta atual. Administradores continuam vendo os dados completos.
+  const [charactersRows, chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
+    fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,description,gender,bot_personality,control_mode,is_banned,ban_until,ban_reason,owner_user_id,is_online'}),
+    fetchAllEmmaRows('chats', null, adminSession
+      ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'}
+      : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'')}),
+    adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : Promise.resolve([]),
+    adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
+    fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,type,target,is_new_user'}),
     emmaApi('get_public_config')
   ]);
+
+  // Mensagens são carregadas somente das conversas visíveis para a conta, evitando baixar o banco inteiro.
+  const chatIds = chatsRows.map(c => c.id).filter(Boolean);
+  const messagesRows = chatIds.length
+    ? await fetchAllEmmaRows('messages', 'created_at', {columns:'id,chat_id,sender_user_id,sender_character_id,message_type,body,created_at,is_bot',in:['chat_id',chatIds]})
+    : [];
+
   const users = profiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
@@ -232,10 +293,12 @@ let emmaRefreshTimer = null;
 let emmaRefreshRunning = false;
 let emmaRefreshPending = false;
 function scheduleEmmaBackendRefresh() {
+  if (document.hidden) { emmaRefreshPending = true; return; }
   emmaRefreshPending = true;
   clearTimeout(emmaRefreshTimer);
-  emmaRefreshTimer = setTimeout(async () => {
-    if (emmaRefreshRunning) return;
+  emmaRefreshTimer = setTimeout(() => {
+    const runRefresh = async () => {
+    if (document.hidden || emmaRefreshRunning) return;
     emmaRefreshRunning = true;
     try {
       while (emmaRefreshPending) {
@@ -244,9 +307,12 @@ function scheduleEmmaBackendRefresh() {
       }
     } finally {
       emmaRefreshRunning = false;
-      if (emmaRefreshPending) scheduleEmmaBackendRefresh();
+      if (emmaRefreshPending && !document.hidden) scheduleEmmaBackendRefresh();
     }
-  }, 350);
+    };
+    if ('requestIdleCallback' in window) requestIdleCallback(runRefresh, {timeout:2000});
+    else runRefresh();
+  }, 500);
 }
 
 function subscribeEmmaRealtime() {
@@ -899,7 +965,7 @@ async function startApp() {
     await sleep(500);
     renderMainApp();
     updateUserPresence();
-    if (!window._emmaPresenceTimer) window._emmaPresenceTimer = setInterval(updateUserPresence, 25000);
+    if (!window._emmaPresenceTimer) window._emmaPresenceTimer = setInterval(() => { if (!document.hidden) updateUserPresence(); }, 60000);
   } catch(e) {
     console.error('startApp error:', e);
   } finally {
@@ -1840,7 +1906,7 @@ async function setBotTakeover(enabled) {
 }
 
 async function updateUserPresence() {
-  if (!state.currentUser || !emmaSupabase) return;
+  if (!state.currentUser || !emmaSupabase || document.hidden) return;
   try {
     await emmaApi('presence');
     const users = DB.get('users', []);
@@ -2700,6 +2766,7 @@ function savePreferences(btn) {
 // ─── LOGOUT ───────────────────────────────────────────────────────────────────
 async function logout() {
   try { await emmaSupabase?.auth.signOut(); } catch {}
+  clearTimeout(emmaSessionTimer); localStorage.removeItem(EMMA_SESSION_STARTED_KEY);
   if (emmaRealtimeChannel) { try { await emmaSupabase.removeChannel(emmaRealtimeChannel); } catch {} emmaRealtimeChannel = null; }
   const owned = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser?.id);
   if (owned) { owned.isOnline = false; const chars = DB.get('characters', []); DB.set('characters', chars); }
@@ -2733,6 +2800,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     const { data: { session } } = await emmaSupabase.auth.getSession();
     if (session) {
+      if (!startEmmaSessionWindow()) return;
       const { data: authData, error } = await emmaSupabase.auth.getUser();
       if (error || !authData.user) throw new Error('Sessão inválida');
       await loadEmmaBackendState();
