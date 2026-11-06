@@ -1448,17 +1448,37 @@ function safeImageUrl(value) {
   catch { return ''; }
 }
 
+// Detecta fala, ação ou pensamento pelo primeiro e último caractere.
+// Ação: *texto*. Pensamento: "texto" ou <texto>.
+function parseTypedMessage(raw) {
+  const value = String(raw || '').trim();
+  if (value.startsWith('*') && value.endsWith('*') && value.length >= 2) {
+    return { type:'action', text:value.slice(1,-1).trim() };
+  }
+  if ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith('<') && value.endsWith('>'))) {
+    return { type:'thought', text:value.slice(1,-1).trim() };
+  }
+  return { type:'speech', text:value };
+}
+
 // ─── SEND MESSAGE ─────────────────────────────────────────────────────────────
 async function sendMessage() {
   const input = el('chat-input');
   const text = input.value.trim();
   if (!text || state.isTyping) return;
 
-  // Se quem está digitando é o controlador do personagem, a fala sai como personagem e não cobra moedas.
+  // O tipo é identificado pelos delimitadores digitados, sem botões.
+  const parsed = parseTypedMessage(text);
+  const messageText = parsed.text;
+  const type = parsed.type;
+  if (!messageText) return toast('Digite o conteúdo da mensagem dentro dos delimitadores.', 'error');
+
+  // Se quem está digitando é o controlador do personagem, a mensagem sai como personagem.
   if (state.currentChat?.char?.ownerUserId === state.currentUser.id) {
-    const chatId = state.currentChat.chatId, type = state.messageType;
+    const chatId = state.currentChat.chatId;
     input.value = ''; input.style.height = 'auto';
-    const characterMsg = { id:'m_'+Date.now(), senderId:state.currentChat.charId, chatId, type, text, timestamp:Date.now(), isCharacterController:true };
+    const characterMsg = { id:'m_'+Date.now(), senderId:state.currentChat.charId, chatId, type, text:messageText, timestamp:Date.now(), isCharacterController:true };
     try {
       await addMessage(characterMsg);
       await refreshEmmaBackendState();
@@ -1469,7 +1489,6 @@ async function sendMessage() {
     return;
   }
 
-  const type = state.messageType; // speech, thought, action
   const config = cfg();
   const cost = type === 'thought' ? config.thoughtCost : (type === 'action' ? config.actionCost : config.speechCost);
 
@@ -1489,7 +1508,7 @@ async function sendMessage() {
     senderId: state.currentUser.id,
     chatId: state.currentChat.chatId,
     type,
-    text,
+    text: messageText,
     timestamp: Date.now(),
     cost
   };
