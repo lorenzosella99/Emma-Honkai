@@ -1202,3 +1202,11 @@ body.premium-theme .admin-section,body.premium-theme .char-card,body.premium-the
 body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:linear-gradient(110deg,#9b78d0,#c69b5e);color:#fff; }
 .premium-plan-card { margin-top:16px;padding:20px;border-radius:20px;border:1px solid rgba(214,173,101,.55);background:radial-gradient(ellipse at top right,rgba(155,120,208,.22),transparent 55%),linear-gradient(145deg,#211a32,#30233f 58%,#4a3541);color:#fff;box-shadow:0 12px 32px rgba(25,15,38,.22); }
 .premium-plan-card h2{margin:6px 0 8px;font-size:1.55rem;color:#f4d89c}.premium-plan-card p,.premium-note{color:rgba(255,255,255,.78);font-size:.88rem;line-height:1.55}.premium-plan-kicker{color:#e7c47c;font-size:.7rem;letter-spacing:.16em;font-weight:800}.premium-benefits{display:grid;gap:8px;margin:16px 0;font-size:.86rem}.premium-prices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}.premium-prices>div{display:flex;flex-direction:column;gap:10px;padding:13px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(231,196,124,.25)}.premium-prices strong{font-size:1.18rem;color:#f4d89c}.premium-active{margin:14px 0;padding:12px;border-radius:12px;background:rgba(231,196,124,.15);color:#f4d89c}.premium-note{margin-top:14px;font-size:.74rem}@media(max-width:380px){.premium-prices{grid-template-columns:1fr}}
+
+/* Progressão de criadores e cartões VIP */
+.creator-level-card{background:linear-gradient(145deg,rgba(117,82,168,.14),rgba(214,173,101,.09));border:1px solid var(--border-bright);border-radius:18px}
+.creator-level-number{font-size:1.8rem;font-weight:900;margin:10px 0;color:var(--accent)}
+.creator-level-track{height:10px;border-radius:20px;background:var(--bg-3);overflow:hidden;margin:10px 0}
+.creator-level-track>div{height:100%;border-radius:20px;background:linear-gradient(90deg,#8b5cf6,#d6ad65)}
+.creator-card .char-info{padding:10px}
+.creator-card .char-name{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
