@@ -1208,3 +1208,15 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 .creator-level-track>div{height:100%;border-radius:20px;background:linear-gradient(90deg,#8b5cf6,#d6ad65)}
 .creator-card .char-info{padding:10px}
 .creator-card .char-name{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+
+
+/* Formatação do conteúdo narrativo, inclusive respostas da IA */
+.msg-bubble .thought-text {
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 700;
+}
+.msg-bubble.action,
+.msg-bubble .action-text {
+  font-weight: 700;
+  font-style: italic;
+}
