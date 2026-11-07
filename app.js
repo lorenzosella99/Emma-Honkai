@@ -2674,29 +2674,58 @@ async function previewCharImg(input) {
   const file = input.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return toast('Selecione um arquivo de imagem.', 'error');
-  if (file.size > 5 * 1024 * 1024) return toast('Imagem muito grande! Máx. 5MB antes da compressão.', 'error');
+  if (file.size > 5 * 1024 * 1024) return toast('Imagem muito grande! Máx. 5MB antes da compactação.', 'error');
+
   charImageProcessing = true;
   const saveButton = document.querySelector('.char-form-modal .modal-actions .btn-primary');
   if (saveButton) { saveButton.disabled = true; saveButton.textContent = 'Compactando imagem…'; }
+
+  let bitmap = null;
+  let sourceUrl = null;
   try {
-    const sourceUrl = URL.createObjectURL(file);
-    const image = new Image();
-    await new Promise((resolve, reject) => {
-      image.onload = resolve;
-      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.'));
-      image.src = sourceUrl;
-    });
+    let drawable = null;
+    let imageWidth = 0;
+    let imageHeight = 0;
+
+    // Primeiro tenta a decodificação nativa, que lida melhor com formatos/orientações variados.
+    if (typeof createImageBitmap === 'function') {
+      try {
+        bitmap = await createImageBitmap(file);
+        drawable = bitmap;
+        imageWidth = bitmap.width;
+        imageHeight = bitmap.height;
+      } catch (_) {
+        bitmap = null;
+      }
+    }
+
+    // Compatibilidade com navegadores que não conseguem usar createImageBitmap.
+    if (!drawable) {
+      sourceUrl = URL.createObjectURL(file);
+      const image = new Image();
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error('Este formato de imagem não é compatível com o navegador. Tente salvar a imagem como JPG ou PNG e selecioná-la novamente.'));
+        image.src = sourceUrl;
+      });
+      drawable = image;
+      imageWidth = image.naturalWidth;
+      imageHeight = image.naturalHeight;
+    }
+
+    if (!imageWidth || !imageHeight) throw new Error('A imagem está vazia ou não pôde ser decodificada.');
     const maxSide = 640;
-    let scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    let scale = Math.min(1, maxSide / Math.max(imageWidth, imageHeight));
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Seu navegador não conseguiu processar a imagem.');
+
     let compacted = '';
     for (let attempt = 0; attempt < 8; attempt++) {
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.width = Math.max(1, Math.round(imageWidth * scale));
+      canvas.height = Math.max(1, Math.round(imageHeight * scale));
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      context.drawImage(drawable, 0, 0, canvas.width, canvas.height);
       for (const quality of [0.76, 0.66, 0.56, 0.46]) {
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality));
         if (!blob) continue;
@@ -2714,15 +2743,17 @@ async function previewCharImg(input) {
       scale *= 0.82;
     }
     if (!compacted) throw new Error('Não foi possível reduzir a imagem para o limite de 220 KB.');
+
     const preview = el('cf-img-preview');
     if (preview) preview.innerHTML = `<img src="${compacted}" style="width:100%;height:100%;object-fit:cover;object-position:top" id="cf-img-thumb"><div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.7rem" onclick="document.getElementById('cf-img-file').click()">✏️</div>`;
     const urlInput = el('cf-image');
     if (urlInput) urlInput.value = compacted;
     toast('Imagem compactada em WebP e pronta para salvar.', 'success');
-    URL.revokeObjectURL(sourceUrl);
   } catch (error) {
     toast(error.message || 'Não foi possível compactar a imagem.', 'error');
   } finally {
+    if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     charImageProcessing = false;
     if (saveButton) { saveButton.disabled = false; saveButton.textContent = 'Salvar'; }
     input.value = '';
