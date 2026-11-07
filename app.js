@@ -295,9 +295,10 @@ async function refreshEmmaBackendState() {
       /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
     if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden') && !editingAdminField) {
       const adminContent = el('admin-content');
-      if (adminContent?.dataset.adminSubview === 'user-chats') adminViewUserChats(adminContent.dataset.userId, { preserveScroll:true });
-      else if (adminContent?.dataset.adminSubview === 'all-chats') adminViewAllChats({ preserveScroll:true });
-      else renderAdminPanel();
+      // Não reconstruir a tela enquanto o administrador está lendo conversas:
+      // a troca do innerHTML interrompe o gesto de rolagem em alguns navegadores.
+      const readingChatHistory = adminContent?.dataset.adminSubview === 'user-chats' || adminContent?.dataset.adminSubview === 'all-chats';
+      if (!readingChatHistory) renderAdminPanel();
     }
   } catch (e) {
     if (!state.currentUser && /suspensa|suspenso/i.test(e.message || '')) {
