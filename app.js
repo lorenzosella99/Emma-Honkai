@@ -1645,7 +1645,8 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
       const aiReply = await emmaApi('generate_character_reply', { chatId: activeChat.chatId });
       const generatedText = String(aiReply?.text || '').trim();
       if (!generatedText) throw new Error('A IA retornou uma resposta vazia.');
-      ordered = [{ type: 'speech', text: generatedText }];
+      if (!aiReply?.id) throw new Error('A resposta da IA não confirmou o salvamento no servidor.');
+      ordered = [{ type: 'speech', text: generatedText, id: aiReply.id, persisted:true }];
     } catch (aiError) {
       const blocked = /controlador está online|não autorizou o modo automático|controlado somente por usuários/i.test(String(aiError?.message || aiError || ''));
       if (blocked) { console.info('Resposta automática suspensa pelas regras de controle do personagem.'); return; }
@@ -1680,8 +1681,8 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
       if (state.currentChat?.chatId !== activeChat.chatId) break;
       const resp = ordered[i];
       const botMsg = {
-        id: 'm_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2,6),
-        senderId: char.id, chatId: activeChat.chatId, type: resp.type,
+        id: resp.id || ('m_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2,6)),
+        senderId: char.id, chatId: activeChat.chatId, type: resp.type, isPersisted:!!resp.persisted,
         text: String(resp.text || '').slice(0,4000), timestamp: Date.now(),
         cost: resp.type === 'thought' ? config.thoughtCost : 0, isBot: true
       };
@@ -1786,12 +1787,14 @@ async function addMessage(msg) {
 
   // A gravação remota ocorre depois da renderização, sem bloquear a interface.
   try {
-    if (msg.isCharacterController) {
-      msg.remoteResult = await emmaApi('send_character_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
+    if (msg.isPersisted) {
+      msg.remoteResult = { ok:true, persisted:true };
+    } else if (msg.isCharacterController) {
+      msg.remoteResult = await emmaApi('send_character_message', { chatId: msg.chatId, messageId: msg.id, text: msg.text, type: msg.type });
     } else if (msg.isBot) {
-      msg.remoteResult = await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, text: msg.text, type: msg.type });
+      msg.remoteResult = await emmaApi('send_bot_message', { chatId: msg.chatId, characterId: state.currentChat.charId, messageId: msg.id, text: msg.text, type: msg.type });
     } else if (msg.senderId === state.currentUser.id) {
-      msg.remoteResult = await emmaApi('send_user_message', { chatId: msg.chatId, text: msg.text, type: msg.type });
+      msg.remoteResult = await emmaApi('send_user_message', { chatId: msg.chatId, messageId: msg.id, text: msg.text, type: msg.type });
     } else {
       throw new Error('Remetente inválido para esta conversa.');
     }
