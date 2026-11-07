@@ -287,7 +287,7 @@ async function refreshEmmaBackendState() {
     await loadEmmaBackendState();
     if (state.currentChat?.chatId) {
       const current = DB.get('messages', {})[state.currentChat.chatId] || [];
-      renderMessages(current);
+      renderMessages(current, { preserveScroll: true });
     }
     if (state.currentTab === 'profile') switchTab('profile');
     const active = document.activeElement;
@@ -1393,8 +1393,10 @@ function chatSkeletonMarkup() {
     </div>`;
 }
 
-function renderMessages(messages) {
+function renderMessages(messages, options = {}) {
   const container = el('chat-messages');
+  const previousScrollTop = container.scrollTop;
+  const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 90;
   if (!messages.length) {
     container.innerHTML = `
       <div class="empty-state">
@@ -1407,7 +1409,14 @@ function renderMessages(messages) {
     return;
   }
   container.innerHTML = messages.map(m => renderMessage(m)).join('');
-  container.scrollTop = container.scrollHeight;
+  if (options.preserveScroll) {
+    requestAnimationFrame(() => {
+      if (!container.isConnected) return;
+      container.scrollTop = wasAtBottom ? container.scrollHeight : previousScrollTop;
+    });
+  } else {
+    container.scrollTop = container.scrollHeight;
+  }
 }
 
 function renderMessage(msg) {
