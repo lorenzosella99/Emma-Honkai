@@ -1368,6 +1368,7 @@ function startNewCharacterChat() {
 async function resetCurrentChat() {
   const chatId = state.currentChat?.chatId;
   if (!chatId || state.currentChat?.char?.ownerUserId === state.currentUser?.id) return;
+  if (state.isTyping) return toast('Aguarde a resposta atual terminar antes de resetar o chat.', 'info');
   if (!confirm('Apagar todas as mensagens desta conversa? Esta ação não pode ser desfeita.')) return;
   const resetButton = el('chat-reset-btn');
   if (resetButton) resetButton.disabled = true;
@@ -1403,6 +1404,10 @@ function renderChatScreen(char, chat) {
   img.alt = char.name;
   const chatScreen = el('screen-chat');
   const controllerView = char.ownerUserId === state.currentUser?.id;
+  const newChatButton = el('chat-new-btn');
+  const resetChatButton = el('chat-reset-btn');
+  if (newChatButton) newChatButton.classList.toggle('hidden', controllerView || !isPremiumActive());
+  if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
   const backgroundImage = controllerView
     ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
