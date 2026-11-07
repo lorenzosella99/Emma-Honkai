@@ -540,6 +540,9 @@ img { display: block; }
 }
 .back-btn:hover { color: var(--text-1); }
 .chat-messages {
+  position: relative;
+  isolation: isolate;
+  background: rgba(10,11,16,.78);
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -549,6 +552,18 @@ img { display: block; }
   gap: 12px;
   scroll-behavior: smooth;
 }
+#screen-chat .chat-messages::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(10,11,16,.78), rgba(10,11,16,.86)), var(--chat-character-bg, none);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+#screen-chat .chat-messages > * { position: relative; z-index: 1; }
 .msg-row {
   display: flex;
   gap: 8px;
