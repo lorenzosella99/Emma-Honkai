@@ -2670,7 +2670,7 @@ function showAddCharModal(editId = null) {
 
 let charImageProcessing = false;
 
-async async function previewCharImg(input) {
+async function previewCharImg(input) {
   const file = input.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return toast('Selecione um arquivo de imagem.', 'error');
