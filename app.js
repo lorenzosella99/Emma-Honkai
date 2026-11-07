@@ -243,7 +243,7 @@ async function loadEmmaBackendState() {
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
-    ownerUserId:c.owner_user_id || null, isOnline:c.owner_user_id ? !!(users.find(u=>u.id===c.owner_user_id)?.lastSeenAt && Date.now() - users.find(u=>u.id===c.owner_user_id).lastSeenAt < 60000) : !!c.is_online
+    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online
   }));
   const chats = chatsRows.map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, lastMessage:c.last_message || '',
@@ -1353,7 +1353,12 @@ function renderChatScreen(char, chat) {
   img.src = char.image;
   img.alt = char.name;
   const chatScreen = el('screen-chat');
-  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', `url("${safeImageUrl(char.image || '')}")`);
+  const controllerView = char.ownerUserId === state.currentUser?.id;
+  const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
+  const backgroundImage = controllerView
+    ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
+    : char.image;
+  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
 
   updateCostHints();
   loadMessages();
@@ -2047,6 +2052,9 @@ async function replyAsCharacter(chatId) {
   if (!chat) return toast('Conversa não encontrada.', 'error');
   state.currentChat = { charId: char.id, char, chatId, userId: chat.userId };
   emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chatId);
+  try {
+    state.currentChat.playerProfile = await emmaApi('get_chat_participant_profile', { chatId });
+  } catch (e) { console.warn('Não foi possível carregar o avatar do participante:', e.message); }
   renderChatScreen(char, chat);
   el('chat-char-status').textContent = 'Você está respondendo como ' + char.name;
   showScreen('screen-chat');
