@@ -326,7 +326,7 @@ function scheduleEmmaBackendRefresh() {
     };
     if ('requestIdleCallback' in window) requestIdleCallback(runRefresh, {timeout:2000});
     else runRefresh();
-  }, 500);
+  }, 1200);
 }
 
 function subscribeEmmaRealtime() {
@@ -362,11 +362,15 @@ const DB = {
           (me.chatPreference || 'both') !== (before.chatPreference || 'both') ||
           (me.avatar || null) !== (before.avatar || null) ||
           !!me.allowBotTakeover !== !!before.allowBotTakeover);
-        if (changed) emmaSupabase.from('profiles').update({
-          user_type: me.userType || 'player', gender: me.gender || 'other',
-          chat_preference: me.chatPreference || 'both', avatar: me.avatar || null,
-          allow_bot_takeover: !!me.allowBotTakeover
-        }).eq('id', myId).then(({error}) => { if (error) console.warn('Profile sync:', error.message); });
+        if (changed && state.currentUser?.id === myId) {
+          emmaApi('sync_my_profile', {
+            gender:me.gender || 'other',
+            chatPreference:me.chatPreference || 'both',
+            avatar:me.avatar || null,
+            allowBotTakeover:!!me.allowBotTakeover,
+            isAnonymous:!!me.isAnonymous
+          }).catch(error => console.warn('Profile sync:', error.message));
+        }
       }
     } catch {}
   }};
@@ -1335,7 +1339,11 @@ async function openChat(charId) {
   } catch(e) {
     if (state.currentChat?.charId === charId) {
       toast(e.message || 'Não foi possível abrir a conversa.', 'error');
-      showScreen('screen-home');
+      el('chat-input').disabled = false;
+      el('chat-input').placeholder = 'Escreva algo...';
+      if (sendButton) sendButton.disabled = false;
+      messageArea.removeAttribute('aria-busy');
+      showScreen('screen-main');
     }
   }
 }
