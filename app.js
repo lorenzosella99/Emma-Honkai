@@ -1600,7 +1600,7 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
     if (char.controlMode === 'users') return;
     const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
     const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 120000);
-    if (char.controlMode !== 'bot' && owner && (ownerOnline || !owner.allowBotTakeover)) return;
+    if (char.controlMode !== 'bot' && owner && !ownerOnline && !owner.allowBotTakeover) return;
 
     const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
     if (!activeTypingEl) activeTypingEl = createTypingIndicator(char, activeChat.chatId);
