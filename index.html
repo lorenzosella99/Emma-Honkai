@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=9145079d332e7a13dd06c176cda92fc3425a1a12">
   <!-- PWA Manifest inline -->
   <link rel="manifest" href="manifest.json">
 </head>
@@ -184,6 +184,10 @@
       <div class="chat-header-name" id="chat-char-name">—</div>
       <div class="chat-header-status" id="chat-char-status">—</div>
     </div>
+    <div class="chat-header-actions">
+      <button id="chat-new-btn" class="btn btn-secondary btn-sm hidden" onclick="startNewCharacterChat()" title="Criar outra conversa">＋</button>
+      <button id="chat-reset-btn" class="btn btn-secondary btn-sm hidden" onclick="resetCurrentChat()" title="Apagar mensagens desta conversa">↻</button>
+    </div>
   </div>
 
   <!-- Messages -->
@@ -191,8 +195,7 @@
 
   <!-- Instruções de formatação das mensagens -->
   <div class="chat-format-hint" role="note">
-    Para falar, apenas digite. Para ações, use * no início e no final.
-    Para pensamentos, use " no início e no final ou &lt; no início e &gt; no final.
+    Para falar, apenas digite. Para ações, use *texto*. Para pensamentos, use "texto" ou &lt;texto&gt;.
   </div>
   <div class="thought-cost-hint">
     <span class="cost-pill">🗣️ <span id="cost-speech">0</span>🪙</span>
@@ -234,7 +237,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js?v=b3e4524bf246ab2e35dc67f4f886b42315b259dc" defer></script>
+<script src="app.js?v=953c6f50d170763caadb9cf1c83aafe64f86c0b1" defer></script>
 <script src="backup-admin.js" defer></script>
 </body>
 </html>
