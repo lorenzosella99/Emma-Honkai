@@ -293,7 +293,12 @@ async function refreshEmmaBackendState() {
     const active = document.activeElement;
     const editingAdminField = active && el('screen-admin')?.contains(active) &&
       /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
-    if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden') && !editingAdminField) renderAdminPanel();
+    if (state.currentUser?.isAdmin && !el('screen-admin')?.classList.contains('hidden') && !editingAdminField) {
+      const adminContent = el('admin-content');
+      if (adminContent?.dataset.adminSubview === 'user-chats') adminViewUserChats(adminContent.dataset.userId, { preserveScroll:true });
+      else if (adminContent?.dataset.adminSubview === 'all-chats') adminViewAllChats({ preserveScroll:true });
+      else renderAdminPanel();
+    }
   } catch (e) {
     if (!state.currentUser && /suspensa|suspenso/i.test(e.message || '')) {
       toast(e.message, 'error', 8000);
@@ -2251,11 +2256,16 @@ async function adminSetSubscriptionBan(userId, banned) {
   } catch(e) { user.subscriptionRenewalBanned = !banned; toast(e.message, 'error'); }
 }
 
-function adminViewUserChats(userId) {
+function adminViewUserChats(userId, options = {}) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const user = DB.get('users', []).find(u => u.id === userId); if (!user) return toast('Usuário não encontrado.', 'error');
   const chats = DB.get('chats', []).filter(c => c.userId === userId); const messages = DB.get('messages', {}); const chars = DB.get('characters', []);
   const container = el('admin-content');
+  const screen = el('screen-admin');
+  const contentScroll = container.scrollTop;
+  const screenScroll = screen?.scrollTop || 0;
+  container.dataset.adminSubview = 'user-chats';
+  container.dataset.userId = userId;
   container.innerHTML = '<div class="admin-section"><button class="btn btn-secondary btn-sm" onclick="adminViewAllChats()">← Voltar</button><div class="admin-section-header">Conversas de ' + escapeHtml(user.username) + '</div>' +
     (chats.length ? chats.map(chat => {
       const character = chars.find(c => c.id === chat.charId); const list = messages[chat.id] || [];
@@ -2266,13 +2276,20 @@ function adminViewUserChats(userId) {
           return '<div style="padding:9px;margin:6px 0;border-radius:10px;background:rgba(255,255,255,.045)"><div style="font-size:.72rem;color:var(--text-3)">' + escapeHtml(sender) + ' · ' + kind + ' · ' + new Date(m.timestamp || Date.now()).toLocaleString('pt-BR') + '</div><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px">' + escapeHtml(String(m.text || '')) + '</div></div>';
         }).join('') : '<div class="admin-row-sub">Nenhuma mensagem nesta conversa.</div>') + '</div>';
     }).join('') : '<div class="admin-row-sub">Este usuário ainda não possui conversas.</div>') + '</div>';
+  if (options.preserveScroll) requestAnimationFrame(() => { container.scrollTop = contentScroll; if (screen) screen.scrollTop = screenScroll; });
 }
 
-function adminViewAllChats() {
+function adminViewAllChats(options = {}) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const users = DB.get('users', []); const chats = DB.get('chats', []); const container = el('admin-content');
+  const screen = el('screen-admin');
+  const contentScroll = container.scrollTop;
+  const screenScroll = screen?.scrollTop || 0;
+  container.dataset.adminSubview = 'all-chats';
+  delete container.dataset.userId;
   container.innerHTML = '<div class="admin-section"><button class="btn btn-secondary btn-sm" onclick="renderAdminPanel()">← Voltar ao painel</button><div class="admin-section-header">💬 Chats de todos os usuários</div>' +
     (users.length ? users.map(u => { const count = chats.filter(c => c.userId === u.id).length; return '<div class="admin-row"><div class="admin-row-info"><div class="admin-row-name">' + escapeHtml(u.username) + '</div><div class="admin-row-sub">' + count + ' conversa(s)</div></div><button class="btn btn-sm btn-secondary" onclick="adminViewUserChats(\'' + u.id + '\')">Abrir conversas</button><button class="btn btn-sm btn-danger" onclick="showAdminDeleteUserModal(\'' + u.id + '\')">Excluir</button></div>'; }).join('') : '<div class="admin-row-sub">Nenhum usuário cadastrado.</div>') + '</div>';
+  if (options.preserveScroll) requestAnimationFrame(() => { container.scrollTop = contentScroll; if (screen) screen.scrollTop = screenScroll; });
 }
 
 function showAdminDeleteUserModal(userId) {
@@ -2308,6 +2325,7 @@ async function confirmAdminDeleteUser(userId, button) {
 }
 function renderAdminPanel() {
   const container = el('admin-content');
+  if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
   const chars = DB.get('characters', []);
   const missions = DB.get('missions', []);
   const config = cfg();
