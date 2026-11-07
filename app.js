@@ -985,7 +985,7 @@ async function startApp() {
     await sleep(500);
     renderMainApp();
     updateUserPresence();
-    if (!window._emmaPresenceTimer) window._emmaPresenceTimer = setInterval(() => { if (!document.hidden) updateUserPresence(); }, 60000);
+    if (!window._emmaPresenceTimer) window._emmaPresenceTimer = setInterval(() => updateUserPresence(), 30000);
   } catch(e) {
     console.error('startApp error:', e);
   } finally {
@@ -1597,9 +1597,10 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
   try {
     if (!activeChat?.chatId || !char) return;
     const config = cfg();
+    if (char.controlMode === 'users') return;
     const owner = char.ownerUserId ? DB.get('users', []).find(u => u.id === char.ownerUserId) : null;
-    const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
-    if (owner && (ownerOnline || !owner.allowBotTakeover)) return;
+    const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 120000);
+    if (char.controlMode !== 'bot' && owner && (ownerOnline || !owner.allowBotTakeover)) return;
 
     const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
     if (!activeTypingEl) activeTypingEl = createTypingIndicator(char, activeChat.chatId);
@@ -1618,6 +1619,8 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
       if (!generatedText) throw new Error('A IA retornou uma resposta vazia.');
       ordered = [{ type: 'speech', text: generatedText }];
     } catch (aiError) {
+      const blocked = /controlador está online|não autorizou o modo automático|controlado somente por usuários/i.test(String(aiError?.message || aiError || ''));
+      if (blocked) { console.info('Resposta automática suspensa pelas regras de controle do personagem.'); return; }
       console.warn('IA online indisponível; usando resposta local temporária:', aiError);
       const aiErrorText = 'Erro na IA: ' + String(aiError?.message || aiError || 'erro desconhecido');
       console.error('[Emma IA]', aiError);
@@ -2018,7 +2021,7 @@ async function setBotTakeover(enabled) {
 }
 
 async function updateUserPresence() {
-  if (!state.currentUser || !emmaSupabase || document.hidden) return;
+  if (!state.currentUser || !emmaSupabase) return;
   try {
     await emmaApi('presence');
     const users = DB.get('users', []);
