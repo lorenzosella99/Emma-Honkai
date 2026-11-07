@@ -1046,7 +1046,7 @@ function renderStoreTab(container) {
   '<div class="admin-section" style="padding:16px"><b>'+(active?'Assinatura de pensamentos ativa':'Assinatura de pensamentos inativa')+'</b><div style="font-size:.85rem;margin-top:6px">'+(active?'Válida até '+new Date(user.thoughtSubscription.expiresAt).toLocaleString('pt-BR'):'Assine para comprar novos pensamentos.')+'</div><div style="font-size:.78rem;color:var(--text-3);margin-top:8px">Pensamentos já desbloqueados continuam disponíveis após a expiração.</div></div>'+
   '<div class="admin-section" style="padding:16px"><b>Plano mensal de pensamentos</b><div style="font-size:1.4rem;margin:10px 0">🪙 '+Number(monthly).toLocaleString('pt-BR')+'</div><button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'monthly\')">Assinar por 30 dias</button></div>'+
   '<div class="admin-section" style="padding:16px"><b>Plano anual de pensamentos</b><div style="font-size:1.4rem;margin:10px 0">🪙 '+Number(yearly).toLocaleString('pt-BR')+'</div><button class="btn btn-primary btn-full" onclick="buyThoughtSubscription(\'yearly\')">Assinar por 365 dias</button></div>'+
-  '<section class="premium-plan-card"><div class="premium-plan-kicker">✦ EXPERIÊNCIA EXCLUSIVA</div><h2>Emma Premium</h2><p>Conversas com um tom mais íntimo, envolvente e específico, com ações mais detalhadas. Também desbloqueia o novo visual exclusivo do site.</p><div class="premium-benefits"><span>♡ Interações mais próximas</span><span>✧ Ações mais detalhadas</span><span>🎨 Visual Premium exclusivo</span></div>'+
+  '<section class="premium-plan-card"><div class="premium-plan-kicker">✦ EXPERIÊNCIA EXCLUSIVA</div><h2>Emma Premium</h2><p>Conversas com um tom mais íntimo, envolvente e específico, com ações mais detalhadas. Também desbloqueia o novo visual exclusivo do site.</p><div class="premium-benefits"><span>♡ Interações mais próximas</span><span>✧ Ações mais detalhadas</span><span>💬 Várias conversas independentes com o mesmo personagem</span><span>🎨 Visual Premium exclusivo</span></div>'+
   (premium?'<div class="premium-active">Premium ativo até '+new Date(Number(user.premiumSubscription.expiresAt)).toLocaleString('pt-BR')+'</div>':'<div class="premium-prices"><div><b>7 dias</b><strong>🪙 22.000</strong><button class="btn btn-primary btn-full" onclick="buyPremiumSubscription(\'weekly\')">Ativar por 7 dias</button></div><div><b>1 ano</b><strong>🪙 946.000</strong><button class="btn btn-primary btn-full" onclick="buyPremiumSubscription(\'yearly\')">Ativar por 1 ano</button></div></div>')+
   '<div class="premium-note">Pagamento somente com moedas Emma. Sem dinheiro real.</div></section></div>';
 }
@@ -1307,13 +1307,16 @@ function openPlayerChat(userId) {
 }
 
 // ─── OPEN CHAT ────────────────────────────────────────────────────────────────
-async function openChat(charId) {
-  const chars = DB.get('characters', []);
-  const char = chars.find(c => c.id === charId);
+async function openChat(charId, requestedChatId = null, createNew = false) {
+  const char = DB.get('characters', []).find(c => c.id === charId);
   if (!char || char.isBanned) return;
-  const previousChat = state.currentChat;
-  const localChat = DB.get('chats', []).find(c => c.userId === state.currentUser.id && c.charId === charId);
-  state.currentChat = { charId, char, chatId: localChat?.id || null };
+  if (createNew && !isPremiumActive()) return toast('Criar várias conversas com o mesmo personagem é um benefício Emma Premium.', 'error');
+  const requestKey = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  const localChats = DB.get('chats', []).filter(c => c.userId === state.currentUser.id && c.charId === charId);
+  const localChat = requestedChatId
+    ? localChats.find(c => c.id === requestedChatId)
+    : localChats.sort((a,b) => (b.createdAt||b.lastTime||0) - (a.createdAt||a.lastTime||0))[0];
+  state.currentChat = { charId, char, chatId: localChat?.id || null, openRequest:requestKey };
   el('chat-char-name').textContent = char.name;
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
@@ -1327,8 +1330,10 @@ async function openChat(charId) {
   messageArea.innerHTML = chatSkeletonMarkup();
   showScreen('screen-chat');
   try {
-    const result = await emmaApi('create_chat', { characterId: charId });
-    if (state.currentChat?.charId !== charId) return;
+    const result = await emmaApi('create_chat', {
+      characterId:charId, chatId:requestedChatId || undefined, newChat:!!createNew
+    });
+    if (state.currentChat?.openRequest !== requestKey) return;
     const row = result.chat;
     const chat = { id:row.id, userId:row.user_id, charId:row.character_id,
       createdAt:Date.parse(row.created_at), lastMessage:row.last_message || '',
@@ -1343,7 +1348,7 @@ async function openChat(charId) {
     messageArea.removeAttribute('aria-busy');
     renderChatScreen(char, chat);
   } catch(e) {
-    if (state.currentChat?.charId === charId) {
+    if (state.currentChat?.openRequest === requestKey) {
       toast(e.message || 'Não foi possível abrir a conversa.', 'error');
       el('chat-input').disabled = false;
       el('chat-input').placeholder = 'Escreva algo...';
@@ -1351,6 +1356,36 @@ async function openChat(charId) {
       messageArea.removeAttribute('aria-busy');
       showScreen('screen-main');
     }
+  }
+}
+
+function startNewCharacterChat() {
+  const charId = state.currentChat?.charId;
+  if (!charId) return;
+  openChat(charId, null, true);
+}
+
+async function resetCurrentChat() {
+  const chatId = state.currentChat?.chatId;
+  if (!chatId || state.currentChat?.char?.ownerUserId === state.currentUser?.id) return;
+  if (!confirm('Apagar todas as mensagens desta conversa? Esta ação não pode ser desfeita.')) return;
+  const resetButton = el('chat-reset-btn');
+  if (resetButton) resetButton.disabled = true;
+  try {
+    await emmaApi('reset_chat', {chatId});
+    const messages = DB.get('messages', {});
+    messages[chatId] = [];
+    DB.set('messages', messages);
+    const chats = DB.get('chats', []);
+    const chat = chats.find(c => c.id === chatId);
+    if (chat) { chat.lastMessage = ''; chat.lastTime = Date.now(); chat.unread = 0; }
+    DB.set('chats', chats);
+    renderMessages([]);
+    toast('Conversa limpa. O chat continua disponível.', 'success');
+  } catch(e) {
+    toast(e.message || 'Não foi possível resetar a conversa.', 'error');
+  } finally {
+    if (resetButton) resetButton.disabled = false;
   }
 }
 
@@ -1463,24 +1498,20 @@ function renderMessage(msg) {
 function formatMessageContent(msg) {
   const raw = String(msg?.text ?? '');
   const type = msg?.type || msg?.message_type || 'speech';
+  if (type === 'action') return '<span class="action-text">' + escapeHtml(raw.trim()) + '</span>';
+  if (type === 'thought') return '<span class="thought-text">' + escapeHtml(raw.trim()) + '</span>';
 
-  // Compatibilidade: também reconhece marcações literais vindas da resposta da IA.
-  if (type === 'action' || (raw.startsWith('*') && raw.endsWith('*') && raw.length > 1)) {
-    const content = type === 'action' && !(raw.startsWith('*') && raw.endsWith('*'))
-      ? raw : raw.slice(1, -1);
-    return '<strong><em>' + escapeHtml(content.trim()) + '</em></strong>';
+  // Marcações podem aparecer no meio de uma fala gerada pela IA.
+  const markers = /\\*([^*\\n]+)\\*|<([^<>\\n]+)>|"([^"\\n]+)"/g;
+  let output = '', last = 0, match;
+  while ((match = markers.exec(raw)) !== null) {
+    output += escapeHtml(raw.slice(last, match.index));
+    if (match[1] !== undefined) output += '<span class="action-text">' + escapeHtml(match[1].trim()) + '</span>';
+    else output += '<span class="thought-text">' + escapeHtml((match[2] ?? match[3]).trim()) + '</span>';
+    last = markers.lastIndex;
   }
-
-  if (type === 'thought' ||
-      ((raw.startsWith('"') && raw.endsWith('"')) ||
-       (raw.startsWith('<') && raw.endsWith('>')))) {
-    const marked = (raw.startsWith('"') && raw.endsWith('"')) ||
-      (raw.startsWith('<') && raw.endsWith('>'));
-    const content = marked ? raw.slice(1, -1) : raw;
-    return '<span class="thought-text">' + escapeHtml(content.trim()) + '</span>';
-  }
-
-  return escapeHtml(raw);
+  output += escapeHtml(raw.slice(last));
+  return output;
 }
 
 function escapeHtml(value) {
@@ -2111,19 +2142,25 @@ function renderOpenChats(container, chats) {
     return;
   }
   const characters = DB.get('characters', []);
-  container.innerHTML = chats.sort((a,b) => b.lastTime - a.lastTime).map(chat => {
+  const ordered = [...chats].sort((a,b) => (b.lastTime||0) - (a.lastTime||0));
+  const counts = {};
+  ordered.forEach(chat => { counts[chat.charId] = (counts[chat.charId]||0) + 1; });
+  const positions = {};
+  container.innerHTML = ordered.map(chat => {
     const char = characters.find(c => c.id === chat.charId);
     if (!char) return '';
+    positions[chat.charId] = (positions[chat.charId]||0) + 1;
     const statusClass = char.isBanned ? 'offline' : (char.isOnline ? 'online' : 'bot');
+    const multipleLabel = counts[chat.charId] > 1 ? `<span class="chat-session-label">Conversa ${positions[chat.charId]} de ${counts[chat.charId]}</span>` : '';
     return `
-      <div class="chat-item" onclick="openChat('${char.id}')">
+      <div class="chat-item" onclick="openChat('${char.id}','${chat.id}')">
         <div class="chat-avatar">
           <img src="${safeImageUrl(char.image)}" alt="${escapeHtml(char.name)}" loading="lazy" onerror="this.src=''">
           <div class="chat-avatar-status ${statusClass}"></div>
         </div>
         <div class="chat-meta">
           <div class="chat-meta-top">
-            <div class="chat-meta-name">${escapeHtml(char.name)}</div>
+            <div class="chat-meta-name">${escapeHtml(char.name)} ${multipleLabel}</div>
             <div class="chat-meta-time">${timeAgo(chat.lastTime)}</div>
           </div>
           <div class="chat-meta-preview">${escapeHtml(chat.lastMessage || 'Nenhuma mensagem ainda')}</div>
