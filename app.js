@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.16';
+const EMMA_APP_VERSION = '0.5.17';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -263,13 +263,12 @@ async function loadEmmaBackendState() {
   const profileResult = adminSession ? await emmaApi('admin_list_profiles') : viceSession ? await emmaApi('vice_dashboard') : {profiles:[ownProfile]};
   const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
-
-  // Busca só o necessário para a conta atual. Administradores continuam vendo os dados completos.
-  const [charactersRows, chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    viceSession ? (profileResult.characters || []) : fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
-    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession
-      ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'}
-      : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'')}),
+  // Carrega os personagens da conta antes das conversas recebidas.
+  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'});
+  const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
+  const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
+  const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
+    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'} : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:characterChatFilter}),
     adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : viceSession ? (profileResult.reports || []) : Promise.resolve([]),
     adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
     viceSession ? (profileResult.missions || []) : fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,type,target,is_new_user'}),
@@ -1974,8 +1973,9 @@ function updateCostHints() {
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 function renderProfileTab(container) {
   const user = state.currentUser;
-  const assignedChar = DB.get('characters', []).find(c => c.ownerUserId === user.id);
-  const myCharacterChats = assignedChar ? DB.get('chats', []).filter(c => c.charId === assignedChar.id) : [];
+  const myCharacters = DB.get('characters', []).filter(c => c.ownerUserId === user.id);
+  const assignedChar = myCharacters[0] || null;
+  const myCharacterChats = DB.get('chats', []).filter(c => myCharacters.some(ch => ch.id === c.charId));
   const chats = DB.get('chats', []).filter(c => c.userId === user.id);
   const totalMsgs = user.totalMessages || 0;
   const chars = user.uniqueCharsContacted?.length || 0;
@@ -2035,16 +2035,16 @@ function renderProfileTab(container) {
 
       <div class="admin-section" style="margin:14px 16px;padding:16px">
         <b>🌟 Área de personagem</b>
-        ${assignedChar ? `<div class="admin-row-sub" style="margin:8px 0">Personagem atribuído: <strong>${escapeHtml(assignedChar.name)}</strong></div>
+        ${myCharacters.length ? `<div class="admin-row-sub" style="margin:8px 0">Você controla ${myCharacters.length} personagem(ns).</div>
           <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
-          <div class="admin-row-sub">${myCharacterChats.length} conversa(s) recebida(s)</div>
-          <div id="character-inbox"></div>`
+          ${myCharacters.map(ch => `<div class="admin-row" style="margin:10px 0;align-items:center"><div class="admin-row-info"><b>${escapeHtml(ch.name)}</b><div class="admin-row-sub">${myCharacterChats.filter(chat => chat.charId === ch.id).length} conversa(s) recebida(s)</div></div></div><div id="character-inbox-${escapeHtml(ch.id)}"></div>`).join('')}
+          <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="requestCharacterRole()">Solicitar outro personagem</button>
+          ${user.characterRequest?.status === 'pending' ? '<div class="admin-row-sub" style="margin-top:8px">Sua solicitação adicional está em análise.</div><span class="chip chip-gold">Em análise</span>' : ''}`
         : user.characterRequest?.status === 'pending'
           ? '<div class="admin-row-sub" style="margin:8px 0">Solicitação enviada. Aguarde o administrador escolher seu personagem.</div><span class="chip chip-gold">Em análise</span>'
           : user.characterRequest?.status === 'rejected'
             ? '<div class="admin-row-sub" style="margin:8px 0">Sua solicitação anterior não foi aprovada. Você pode solicitar novamente.</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Solicitar novamente</button>'
-            : '<div class="admin-row-sub" style="margin:8px 0">Quer interpretar um personagem e conversar com outros jogadores?</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Quero ser um personagem</button>'}
-      </div>
+            : '<div class="admin-row-sub" style="margin:8px 0">Quer interpretar um personagem e conversar com outros jogadores?</div><button class="btn btn-primary btn-sm" onclick="requestCharacterRole()">Quero ser um personagem</button>'}      </div>
       ${user.userType === "character" || assignedChar ? `<div class="admin-section creator-level-card" style="margin:14px 16px;padding:16px"><b>🏆 Nível do criador</b><div class="creator-level-number">Nível ${Number(user.creatorLevel||1)} / 99</div><div class="creator-level-track"><div style="width:${Number(user.creatorLevel)>=99?100:Math.max(0,Math.min(100,((Number(user.creatorXp||0)-100*(Number(user.creatorLevel||1)-1)*Number(user.creatorLevel||1)/2)/(100*Number(user.creatorLevel||1)))*100))}%"></div></div><div class="admin-row-sub">${Number(user.creatorXp||0).toLocaleString("pt-BR")} XP · Hoje ${dailyCreatorMessages}/100 mensagens (+500 XP) · Semana ${weeklyCreatorMessages}/2.000 (+1.850 XP)</div>${Number(user.creatorLevel)>=99?(user.creatorLevel99RewardClaimed?'<span class="chip chip-gold">Premium de nível 99 resgatado</span>':'<span class="chip chip-gold">Nível máximo alcançado</span>'):""}</div>` : ""}
       <div class="admin-section" style="margin:14px 16px;padding:16px">
         <b>📥 Importar histórico do Discord</b>
@@ -2067,7 +2067,7 @@ function renderProfileTab(container) {
   `;
 
   renderOpenChats(el('open-chats-list'), chats);
-  if (assignedChar) renderCharacterInbox(el('character-inbox'), assignedChar, myCharacterChats);
+  myCharacters.forEach(ch => renderCharacterInbox(el('character-inbox-' + ch.id), ch, myCharacterChats.filter(chat => chat.charId === ch.id)));
 }
 
 
@@ -2220,9 +2220,9 @@ function renderCharacterInbox(container, character, chats) {
 }
 
 async function replyAsCharacter(chatId) {
-  const char = DB.get('characters', []).find(c => c.ownerUserId === state.currentUser.id);
-  if (!char) return toast('Nenhum personagem atribuído.', 'error');
-  const chat = DB.get('chats', []).find(c => c.id === chatId && c.charId === char.id);
+  const chat = DB.get('chats', []).find(c => c.id === chatId);
+  const char = DB.get('characters', []).find(c => c.id === chat?.charId && c.ownerUserId === state.currentUser.id);
+  if (!char) return toast('Você não controla o personagem desta conversa.', 'error');
   if (!chat) return toast('Conversa não encontrada.', 'error');
   state.currentChat = { charId: char.id, char, chatId, userId: chat.userId };
   emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chatId);
