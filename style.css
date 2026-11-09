@@ -561,7 +561,7 @@ body.chat-open .bottom-nav { display: none !important; }
 #screen-chat.photosensitive-chat .chat-messages {
   background-image: linear-gradient(rgba(10,11,16,.48), rgba(10,11,16,.62)), var(--chat-character-bg, none);
 }
-#screen-chat.photosensitive-chat .msg-avatar img { filter: blur(4px); }
+#screen-chat.photosensitive-chat .msg-avatar img { filter: blur(5px); }
 #screen-chat .chat-messages > * { position: relative; z-index: 1; }
 .msg-row {
   display: flex;
