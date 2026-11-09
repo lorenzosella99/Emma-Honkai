@@ -1262,6 +1262,9 @@ function revealSensitiveCharacterImage(charId) {
     img.src = getHideCharacterImages() ? FALLBACK_SVG : (char.image || FALLBACK_SVG);
   });
   document.querySelectorAll('[data-reveal-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(button => button.remove());
+  if (state.currentChat?.charId === charId && el('screen-chat')) {
+    el('screen-chat').style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
+  }
 }
 
 function renderCharGrid(container, chars) {
@@ -1466,7 +1469,7 @@ function renderChatScreen(char, chat) {
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
   const backgroundImage = controllerView
     ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
-    : char.image;
+    : (char.isPhotosensitive && !revealedSensitiveCharacters.has(String(char.id)) ? '' : char.image);
   if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
 
   updateCostHints();
