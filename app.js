@@ -1985,7 +1985,7 @@ function renderProfileTab(container) {
   const dailyCreatorMessages=user.creatorDailyDate===brToday?Number(user.creatorDailyMessages||0):0;
   const weeklyCreatorMessages=user.creatorWeekStart===brWeekStart?Number(user.creatorWeeklyMessages||0):0;
   const typeLabel = user.userType === 'character' ? '🌟 Personagem' : '🎮 Jogador';
-  const prefLabel = { both:'👥 Todos', bots:'🤖 Só Bots', female:'♀ Mulheres', male:'♂ Homens' }[user.chatPreference || 'both'];
+  const prefLabel = { both:'👥 Todos', bots:'🤖 Só Bots', female:'♀ Mulheres', male:'♂ Homens', players:'🎭 Só Players' }[user.chatPreference || 'both'];
 
   container.innerHTML = `
     <div class="profile-banner"></div>
@@ -3225,6 +3225,7 @@ function showEditPreferencesModal() {
           <button type="button" class="chip-select ${user.chatPreference==='bots'?'active':''}" data-val="bots" onclick="selectChip(this,'pref-chatpref')">🤖 Só Bots</button>
           <button type="button" class="chip-select ${user.chatPreference==='female'?'active':''}" data-val="female" onclick="selectChip(this,'pref-chatpref')">♀ Mulheres</button>
           <button type="button" class="chip-select ${user.chatPreference==='male'?'active':''}" data-val="male" onclick="selectChip(this,'pref-chatpref')">♂ Homens</button>
+          <button type="button" class="chip-select ${user.chatPreference==='players'?'active':''}" data-val="players" onclick="selectChip(this,'pref-chatpref')">🎭 Só Players</button>
         </div>
       </div>
       <div class="modal-actions">
