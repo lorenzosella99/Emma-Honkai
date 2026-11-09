@@ -178,7 +178,7 @@ function profileToAppUser(p) {
     premiumSubscriptionHistory: Array.isArray(p.premium_subscription_history) ? p.premium_subscription_history : [],
     thoughtSubscriptionHistory: Array.isArray(p.thought_subscription_history) ? p.thought_subscription_history : [],
     subscriptionRenewalBanned: !!p.subscription_renewal_banned,
-    bannedUntil: p.banned_until ? Date.parse(p.banned_until) : null, banReason: p.ban_reason || '',
+    bannedUntil: p.banned_until ? Date.parse(p.banned_until) : null, isPermanentlyBanned: !!p.is_permanently_banned, banReason: p.ban_reason || '',
     coinHistory: Array.isArray(p.coin_history) ? p.coin_history : []
   };
 }
