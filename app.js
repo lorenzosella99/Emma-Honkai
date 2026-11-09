@@ -1199,7 +1199,7 @@ function _renderCharsContent(pref) {
     u.id !== state.currentUser.id &&
     u.userType === 'character' &&
     chars.some(c => c.ownerUserId === u.id) &&
-    !(u.bannedUntil && Date.now() < u.bannedUntil)
+    !(u.isPermanentlyBanned || (u.bannedUntil && Date.now() < u.bannedUntil))
   );
 
   // Filter players by gender pref
@@ -2750,7 +2750,7 @@ async function banUser(userId, btn) {
 
 async function unbanUser(userId) {
   if (!canAdminPermission('ban_users')) return toast('Acesso negado.', 'error');
-  try { await emmaApi('admin_set_user_ban', {userId, bannedUntil:null, reason:''}); await loadEmmaBackendState(); toast('Usuário desbanido!', 'success'); renderAdminPanel(); }
+  try { await emmaApi('admin_set_user_ban', {userId, mode:'lift'}); await loadEmmaBackendState(); toast('Usuário desbanido!', 'success'); renderAdminPanel(); }
   catch(e) { toast(e.message, 'error'); }
 }
 
