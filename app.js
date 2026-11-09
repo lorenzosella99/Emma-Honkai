@@ -945,6 +945,7 @@ function initAuth() {
 // ─── PASSWORD RECOVERY ───────────────────────────────────────────────────────
 // Admin reset (from admin panel)
 function adminResetPassword(userId) {
+  if (!canAdminPermission('reset_passwords')) return toast('Acesso negado.', 'error');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -965,6 +966,7 @@ function adminResetPassword(userId) {
 }
 
 async function confirmAdminReset(userId, btn) {
+  if (!canAdminPermission('reset_passwords')) return toast('Acesso negado.', 'error');
   const newPass = el('admin-new-pass').value.trim();
   if (!newPass || newPass.length < 12 || newPass.length > 72) return toast('A senha precisa ter entre 12 e 72 caracteres.', 'error');
   try { await emmaApi('admin_reset_password', {userId, password:newPass}); btn.closest('.modal-overlay').remove(); toast('Senha redefinida no Supabase Auth.', 'success'); }
@@ -2137,7 +2139,7 @@ async function reportChatPlayer(chatId) {
 }
 
 async function adminResolveReport(reportId, status) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('manage_reports')) return toast('Acesso negado.', 'error');
   try {
     await emmaApi('review_report', { reportId, status });
     await refreshEmmaBackendState();
@@ -2348,7 +2350,7 @@ function adminViewAllChats(options = {}) {
 }
 
 function showAdminDeleteUserModal(userId) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('delete_users')) return toast('Acesso negado.', 'error');
   const user = DB.get('users', []).find(u => u.id === userId);
   if (!user) return toast('Usuário não encontrado. Atualize a lista.', 'error');
   if (userId === state.currentUser.id) return toast('Você não pode excluir sua própria conta.', 'error');
@@ -2359,7 +2361,7 @@ function showAdminDeleteUserModal(userId) {
 }
 
 async function confirmAdminDeleteUser(userId, button) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('delete_users')) return toast('Acesso negado.', 'error');
   const user = DB.get('users', []).find(u => u.id === userId);
   const typed = el('admin-delete-username')?.value?.trim().toLowerCase();
   if (!user || typed !== String(user.username || '').trim().toLowerCase()) return toast('O nome digitado não corresponde à conta.', 'error');
@@ -2582,7 +2584,7 @@ function renderAdminPanel() {
 }
 
 function showAdminDeleteCharacterModal(characterId) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('delete_characters')) return toast('Acesso negado.', 'error');
   const character = DB.get('characters', []).find(c => c.id === characterId);
   if (!character) return toast('Personagem não encontrado. Atualize a lista.', 'error');
   const overlay = document.createElement('div');
@@ -2592,7 +2594,7 @@ function showAdminDeleteCharacterModal(characterId) {
 }
 
 async function confirmAdminDeleteCharacter(characterId, button) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('delete_characters')) return toast('Acesso negado.', 'error');
   const character = DB.get('characters', []).find(c => c.id === characterId);
   const typed = el('admin-delete-character-name')?.value?.trim().toLocaleLowerCase('pt-BR');
   if (!character || typed !== String(character.name || '').trim().toLocaleLowerCase('pt-BR')) return toast('O nome digitado não corresponde ao personagem.', 'error');
@@ -2654,6 +2656,7 @@ async function saveConfig() {
 }
 
 async function toggleCharOnline(charId, isOnline) {
+  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
   if (!char) return;
@@ -2663,6 +2666,7 @@ async function toggleCharOnline(charId, isOnline) {
 }
 
 function showBanCharModal(charId) {
+  if (!canAdminPermission('ban_characters')) return toast('Acesso negado.', 'error');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -2687,6 +2691,7 @@ function showBanCharModal(charId) {
 }
 
 async function banChar(charId, btn) {
+  if (!canAdminPermission('ban_characters')) return toast('Acesso negado.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const reason = el('ban-char-reason').value.trim() || 'Sem motivo';
   const days = parseInt(el('ban-char-days').value) || 3;
@@ -2699,6 +2704,7 @@ async function banChar(charId, btn) {
 }
 
 async function unbanChar(charId) {
+  if (!canAdminPermission('ban_characters')) return toast('Acesso negado.', 'error');
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
   if (!char) return;
@@ -2708,6 +2714,7 @@ async function unbanChar(charId) {
 }
 
 function showBanUserModal(userId) {
+  if (!canAdminPermission('ban_users')) return toast('Acesso negado.', 'error');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -2732,6 +2739,7 @@ function showBanUserModal(userId) {
 }
 
 async function banUser(userId, btn) {
+  if (!canAdminPermission('ban_users')) return toast('Acesso negado.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const reason = el('ban-user-reason').value.trim() || 'Sem motivo';
   const days = parseInt(el('ban-user-days').value) || 3;
@@ -2741,11 +2749,13 @@ async function banUser(userId, btn) {
 }
 
 async function unbanUser(userId) {
+  if (!canAdminPermission('ban_users')) return toast('Acesso negado.', 'error');
   try { await emmaApi('admin_set_user_ban', {userId, bannedUntil:null, reason:''}); await loadEmmaBackendState(); toast('Usuário desbanido!', 'success'); renderAdminPanel(); }
   catch(e) { toast(e.message, 'error'); }
 }
 
 async function deleteMission(missionId) {
+  if (!canAdminPermission('manage_missions')) return toast('Acesso negado.', 'error');
   try {
     await emmaApi('admin_delete_mission', {missionId});
     const missions = DB.get('missions', []).filter(m => m.id !== missionId);
@@ -2754,6 +2764,7 @@ async function deleteMission(missionId) {
 }
 
 function showAddCharModal(editId = null) {
+  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
   const chars = DB.get('characters', []);
   const char = editId ? chars.find(c => c.id === editId) : null;
   const imgSrc = char?.image || '';
@@ -2905,6 +2916,7 @@ function syncCharImgUrl(input) {
 function showEditCharModal(charId) { showAddCharModal(charId); }
 
 async function saveChar(editId, btn) {
+  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
   if (charImageProcessing) return toast('Aguarde a compactação da imagem.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
@@ -2954,6 +2966,7 @@ async function saveChar(editId, btn) {
 }
 
 function showAddMissionModal() {
+  if (!canAdminPermission('manage_missions')) return toast('Acesso negado.', 'error');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -2987,6 +3000,7 @@ function showAddMissionModal() {
 }
 
 async function saveMission(btn) {
+  if (!canAdminPermission('manage_missions')) return toast('Acesso negado.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const title = el('mf-title').value.trim();
   if (!title) return toast('Título obrigatório.', 'error');
