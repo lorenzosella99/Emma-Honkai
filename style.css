@@ -567,6 +567,7 @@ img { display: block; }
 #screen-chat.photosensitive-chat .chat-messages::before {
   filter: blur(9px);
 }
+#screen-chat.photosensitive-chat .msg-avatar img { filter: blur(9px); }
 #screen-chat .chat-messages > * { position: relative; z-index: 1; }
 .msg-row {
   display: flex;
