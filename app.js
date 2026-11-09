@@ -222,7 +222,7 @@ async function loadEmmaBackendState() {
 
   // Busca só o necessário para a conta atual. Administradores continuam vendo os dados completos.
   const [charactersRows, chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    viceSession ? (profileResult.characters || []) : fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
+    viceSession ? (profileResult.characters || []) : fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
     viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession
       ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'}
       : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'')}),
@@ -252,7 +252,7 @@ async function loadEmmaBackendState() {
   const allProfiles = profiles.some(p => p.id === ownProfile.id) ? profiles : [...profiles, ownProfile];
   const users = allProfiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
-    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '',
+    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online
@@ -1265,7 +1265,7 @@ function revealSensitiveCharacterImage(charId) {
   if (avatar) avatar.src = char.image || FALLBACK_SVG;
   el('chat-reveal-sensitive')?.remove();
   const chatScreen = el('screen-chat');
-  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
+  if (chatScreen && chatScreen.classList.contains('photosensitive-chat')) chatScreen.style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
 }
 
 function renderCharGrid(container, chars) {
@@ -1369,8 +1369,6 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
   const avatar = el('chat-char-avatar-img'); avatar.src = characterImageSource(char.image,char.id,char.isPhotosensitive); avatar.alt = char.name; avatar.dataset.sensitiveCharacter = String(char.id);
-  const oldReveal = el('chat-reveal-sensitive');
-  if (oldReveal) oldReveal.remove();
   el('chat-reveal-sensitive')?.remove();
   el('chat-input').disabled = true;
   el('chat-input').placeholder = 'Carregando conversa...';
@@ -1472,10 +1470,14 @@ function renderChatScreen(char, chat) {
   if (newChatButton) newChatButton.classList.toggle('hidden', controllerView || !isPremiumActive());
   if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
+  const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !getHideCharacterImages() && !!char.image;
   const backgroundImage = controllerView
     ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
-    : (getHideCharacterImages() ? '' : char.image);
-  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
+    : (showSensitiveBackdrop ? char.image : '');
+  if (chatScreen) {
+    chatScreen.classList.toggle('photosensitive-chat', showSensitiveBackdrop);
+    chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
+  }
 
   updateCostHints();
   loadMessages();
@@ -2874,7 +2876,13 @@ function showAddCharModal(editId = null) {
           <button type="button" class="chip-select ${(!char?.gender||char?.gender==='other')?'active':''}" data-val="other" onclick="selectChip(this,'cf-gender')">✦ Outro</button>
         </div>
       </div>
-      <div class="field"><label>Descrição</label><input class="input" id="cf-desc" value="${escapeHtml(char?.description||'')}"></div>
+      <div class="field"><label>Descrição</label><textarea class="input" id="cf-desc" rows="3" style="min-height:76px">${escapeHtml(char?.description||'')}</textarea></div>
+      <div class="field"><label>Início da história</label><textarea class="input" id="cf-story-intro" rows="4" style="min-height:100px" placeholder="Descreva a cena inicial, o lugar, o momento e o que está acontecendo...">${escapeHtml(char?.storyIntro||'')}</textarea><small style="color:var(--text-3)">A IA usará este texto como ponto de partida e referência para manter a continuidade do roleplay.</small></div>
+      <div class="form-row">
+        <div class="field"><label>Idade (anos)</label><input type="number" class="input" id="cf-age" min="0" max="200" step="1" value="${char?.ageYears ?? ''}" placeholder="Ex.: 24"></div>
+        <div class="field"><label>Altura (cm)</label><input type="number" class="input" id="cf-height" min="30" max="300" step="1" value="${char?.heightCm ?? ''}" placeholder="Ex.: 170"></div>
+        <div class="field"><label>Peso (kg)</label><input type="number" class="input" id="cf-weight" min="1" max="1000" step="0.1" value="${char?.weightKg ?? ''}" placeholder="Ex.: 65"></div>
+      </div>
       <div class="field"><label><input type="checkbox" id="cf-is-vip" ${char?.isVip ? "checked" : ""}> Marcar como personagem VIP</label></div>
       <div class="field"><label>Quem pode controlar este personagem?</label><select class="input" id="cf-control-mode"><option value="bot" ${char?.controlMode==='bot'?'selected':''}>Somente bot</option><option value="both" ${(!char?.controlMode||char?.controlMode==='both')?'selected':''}>Ambos (bot e usuários)</option><option value="users" ${char?.controlMode==='users'?'selected':''}>Somente usuários</option></select></div>
       <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${escapeHtml(char?.botPersonality||'')}</textarea></div>
@@ -3003,6 +3011,12 @@ async function saveChar(editId, btn) {
   const image = el('cf-image').value.trim();
   if (/^data:image\//i.test(image) && (!/^data:image\/webp;base64,/i.test(image) || image.length > 310000)) return toast('A imagem precisa estar compactada em WebP e ter no máximo 220 KB.', 'error');
   const gender = getChipVal('cf-gender', 'other');
+  const ageYears = el('cf-age').value.trim() === '' ? null : Number(el('cf-age').value);
+  const heightCm = el('cf-height').value.trim() === '' ? null : Number(el('cf-height').value);
+  const weightKg = el('cf-weight').value.trim() === '' ? null : Number(el('cf-weight').value);
+  if (ageYears !== null && (!Number.isInteger(ageYears) || ageYears < 0 || ageYears > 200)) return toast('Idade inválida (0 a 200 anos).', 'error');
+  if (heightCm !== null && (!Number.isInteger(heightCm) || heightCm < 30 || heightCm > 300)) return toast('Altura inválida (30 a 300 cm).', 'error');
+  if (weightKg !== null && (!Number.isFinite(weightKg) || weightKg < 1 || weightKg > 1000)) return toast('Peso inválido (1 a 1000 kg).', 'error');
   const controlMode = ['bot','both','users'].includes(el('cf-control-mode')?.value) ? el('cf-control-mode').value : 'both';
 
   if (editId) {
@@ -3012,6 +3026,10 @@ async function saveChar(editId, btn) {
       char.role = el('cf-role').value.trim();
       if (image) char.image = image;
       char.description = el('cf-desc').value.trim();
+      char.storyIntro = el('cf-story-intro').value.trim();
+      char.ageYears = ageYears;
+      char.heightCm = heightCm;
+      char.weightKg = weightKg;
       char.botPersonality = el('cf-personality').value.trim();
       char.gender = gender;
       char.controlMode = controlMode;
@@ -3024,6 +3042,10 @@ async function saveChar(editId, btn) {
       role: el('cf-role').value.trim(),
       image: image || '',
       description: el('cf-desc').value.trim(),
+      storyIntro: el('cf-story-intro').value.trim(),
+      ageYears,
+      heightCm,
+      weightKg,
       botPersonality: el('cf-personality').value.trim(),
       gender,
       controlMode,
