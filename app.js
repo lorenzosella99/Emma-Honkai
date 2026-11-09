@@ -1059,6 +1059,7 @@ async function startApp() {
     checkDailyMission();
     await sleep(500);
     renderMainApp();
+    startAdminUpdateWatcher();
     updateUserPresence();
     if (!window._emmaPresenceTimer) window._emmaPresenceTimer = setInterval(() => updateUserPresence(), 30000);
   } catch(e) {
