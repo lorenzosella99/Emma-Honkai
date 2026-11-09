@@ -206,8 +206,8 @@ async function loadEmmaBackendState() {
   const ownProfileResult = await emmaSupabase.from('profiles').select('*').eq('id', sessionUserId).maybeSingle();
   if (ownProfileResult.error || !ownProfileResult.data) throw (ownProfileResult.error || new Error('Perfil não encontrado.'));
   const ownProfile = ownProfileResult.data;
-  const adminSession = state.currentUser?.isAdmin || ownProfile.role === 'admin';
-  const viceSession = !adminSession && (state.currentUser?.isViceAdmin || ownProfile.role === 'vice_admin');
+  const adminSession = ownProfile.role === 'admin';
+  const viceSession = !adminSession && ownProfile.role === 'vice_admin';
   const profileResult = adminSession ? await emmaApi('admin_list_profiles') : viceSession ? await emmaApi('vice_dashboard') : {profiles:[ownProfile]};
   const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
