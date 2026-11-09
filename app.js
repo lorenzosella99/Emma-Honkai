@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.17';
+const EMMA_APP_VERSION = '0.5.18';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2039,6 +2039,7 @@ function renderProfileTab(container) {
           <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
           ${myCharacters.map(ch => `<div class="admin-row" style="margin:10px 0;align-items:center"><div class="admin-row-info"><b>${escapeHtml(ch.name)}</b><div class="admin-row-sub">${myCharacterChats.filter(chat => chat.charId === ch.id).length} conversa(s) recebida(s)</div></div></div><div id="character-inbox-${escapeHtml(ch.id)}"></div>`).join('')}
           <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="requestCharacterRole()">Solicitar outro personagem</button>
+          <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="showAddCharModal()">+ Criar personagem</button>
           ${user.characterRequest?.status === 'pending' ? '<div class="admin-row-sub" style="margin-top:8px">Sua solicitação adicional está em análise.</div><span class="chip chip-gold">Em análise</span>' : ''}`
         : user.characterRequest?.status === 'pending'
           ? '<div class="admin-row-sub" style="margin:8px 0">Solicitação enviada. Aguarde o administrador escolher seu personagem.</div><span class="chip chip-gold">Em análise</span>'
@@ -2898,7 +2899,8 @@ async function deleteMission(missionId) {
 function showAddCharModal(editId = null) {
   const chars = DB.get('characters', []);
   const char = editId ? chars.find(c => c.id === editId) : null;
-  if (editId ? !canEditCharacter(char) : !canAdminPermission('edit_characters')) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
+  const creatorMode = !editId && state.currentUser?.userType === 'character' && !canAdminPermission('edit_characters');
+  if (editId ? !canEditCharacter(char) : (!creatorMode && !canAdminPermission('edit_characters'))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
   const imgSrc = char?.image || '';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay char-form-modal';
@@ -2942,11 +2944,12 @@ function showAddCharModal(editId = null) {
       <div class="field"><label>Personalidade do Bot</label><textarea class="input" id="cf-personality" style="min-height:80px">${escapeHtml(char?.botPersonality||'')}</textarea></div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
-        <button class="btn btn-primary flex-1" onclick="saveChar('${editId||''}', this)">Salvar</button>
+        <button class="btn btn-primary flex-1" onclick="saveChar('${editId||''}', this, ${creatorMode})">Salvar</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
+  if (creatorMode) { el('cf-is-vip')?.closest('.field')?.remove(); el('cf-control-mode')?.closest('.field')?.remove(); }
 }
 
 let charImageProcessing = false;
@@ -3054,10 +3057,10 @@ function syncCharImgUrl(input) {
 
 function showEditCharModal(charId) { showAddCharModal(charId); }
 
-async function saveChar(editId, btn) {
+async function saveChar(editId, btn, creatorMode = false) {
   const existingCharacter = editId ? DB.get('characters', []).find(c => c.id === editId) : null;
   const requestsVip = !!el('cf-is-vip')?.checked;
-  if (existingCharacter ? !canEditCharacter(existingCharacter) : (!canAdminPermission('edit_characters') || (requestsVip && !canAdminPermission('edit_vip_characters')))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
+  if (existingCharacter ? !canEditCharacter(existingCharacter) : (creatorMode ? state.currentUser?.userType !== 'character' : (!canAdminPermission('edit_characters') || (requestsVip && !canAdminPermission('edit_vip_characters'))))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
   if (charImageProcessing) return toast('Aguarde a compactação da imagem.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
@@ -3094,7 +3097,7 @@ async function saveChar(editId, btn) {
     }
   } else {
     chars.push({
-      id: 'c_' + Date.now(),
+      id: 'c_' + crypto.randomUUID(),
       name,
       role: el('cf-role').value.trim(),
       image: image || '',
@@ -3116,9 +3119,10 @@ async function saveChar(editId, btn) {
   }
   const saved = chars.find(c => c.id === (editId || chars[chars.length-1].id));
   try {
-    await emmaApi('admin_save_character', {character:saved});
-    DB.set('characters', chars); overlay.remove(); toast('Personagem salvo no servidor!', 'success');
-    await loadEmmaBackendState(); renderAdminPanel();
+    if (creatorMode) await emmaApi('creator_create_character', {character:saved});
+    else await emmaApi('admin_save_character', {character:saved});
+    DB.set('characters', chars); overlay.remove(); toast(creatorMode ? 'Seu personagem foi criado!' : 'Personagem salvo no servidor!', 'success');
+    await loadEmmaBackendState(); if (creatorMode) switchTab('profile'); else renderAdminPanel();
   } catch(e) { toast('Não foi possível salvar o personagem: ' + e.message, 'error'); }
 }
 
