@@ -854,6 +854,14 @@ function renderAuthScreen() {
       </div>
       <div class="field"><label><input type="checkbox" id="pref-anonymous" ${user.isAnonymous ? "checked" : ""}> Manter minha conta anônima (detalhes só aparecem quando eu seguir de volta)</label></div>
       <div class="field">
+        <label>Acessibilidade</label>
+        <label style="display:flex;align-items:flex-start;gap:10px;line-height:1.4">
+          <input type="checkbox" id="pref-hide-character-images" ${getHideCharacterImages() ? "checked" : ""} style="margin-top:3px">
+          <span>Ocultar imagens dos personagens (fotossensibilidade)</span>
+        </label>
+        <small style="color:var(--text-3)">Substitui as fotos por um ícone neutro neste dispositivo.</small>
+      </div>
+      <div class="field">
         <label>Preferência de conversa</label>
         <div class="chip-group" id="auth-chatpref">
           <button type="button" class="chip-select active" data-val="both" onclick="selectChip(this,'auth-chatpref')">👥 Todos</button>
@@ -1226,6 +1234,15 @@ function _renderCharsContent(pref) {
 }
 
 const FALLBACK_SVG = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160" viewBox="0 0 120 160"><rect width="120" height="160" fill="%231f2133"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-size="40">👤</text></svg>`;
+function getHideCharacterImages() {
+  try { return localStorage.getItem('emma_hide_character_images_' + (state.currentUser?.id || 'guest')) === '1'; }
+  catch { return false; }
+}
+function setHideCharacterImages(enabled) {
+  try { const key = 'emma_hide_character_images_' + (state.currentUser?.id || 'guest'); if (enabled) localStorage.setItem(key, '1'); else localStorage.removeItem(key); }
+  catch(e) { console.warn('Falha ao salvar preferência de acessibilidade:', e); }
+}
+function characterImageSource(src) { return getHideCharacterImages() ? FALLBACK_SVG : (src || FALLBACK_SVG); }
 
 function renderCharGrid(container, chars) {
   if (!container) return;
@@ -1244,7 +1261,7 @@ function renderCharGrid(container, chars) {
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img src="${imgSrc}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          <img src="${characterImageSource(imgSrc)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
@@ -1268,7 +1285,7 @@ function renderPlayerGrid(container, players) {
     const displayName=assigned?.name||u.username;
     const online=!!(u.lastSeenAt&&Date.now()-Number(u.lastSeenAt)<60000);
     const details=u.detailsVisible?'<div class="char-role">'+escapeHtml(u.username)+' · Nível '+Number(u.level||1)+'</div>':'<div class="char-role">Detalhes ocultos até seguimento mútuo</div>';
-    return '<div class="char-card creator-card" onclick="openChat(\''+(assigned?.id||'')+'\')"><div class="char-img-wrap"><img src="'+avatarSrc+'" alt="'+escapeHtml(displayName)+'" loading="lazy" onerror="this.src=\''+FALLBACK_SVG+'\'" style="object-fit:cover"><div class="char-status-dot '+(online?'online':'bot')+'"></div></div><div class="char-info"><div class="char-name">'+escapeHtml(displayName)+(u.isVip?' <span class="chip chip-gold">VIP</span>':'')+'</div>'+details+'<button class="btn btn-secondary btn-sm" style="margin-top:7px" onclick="event.stopPropagation();toggleCreatorFollow(\''+u.userId+'\','+(!u.following)+')">'+(u.following?'Seguindo':'Seguir')+'</button></div></div>';
+    return '<div class="char-card creator-card" onclick="openChat(\''+(assigned?.id||'')+'\')"><div class="char-img-wrap"><img src="'+characterImageSource(avatarSrc)+'" alt="'+escapeHtml(displayName)+'" loading="lazy" onerror="this.src=\''+FALLBACK_SVG+'\'" style="object-fit:cover"><div class="char-status-dot '+(online?'online':'bot')+'"></div></div><div class="char-info"><div class="char-name">'+escapeHtml(displayName)+(u.isVip?' <span class="chip chip-gold">VIP</span>':'')+'</div>'+details+'<button class="btn btn-secondary btn-sm" style="margin-top:7px" onclick="event.stopPropagation();toggleCreatorFollow(\''+u.userId+'\','+(!u.following)+')">'+(u.following?'Seguindo':'Seguir')+'</button></div></div>';
   }).join('');
 }
 async function toggleCreatorFollow(userId,follow) {
@@ -1647,7 +1664,7 @@ function createTypingIndicator(char, chatId) {
   typingEl.id = 'typing_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
   typingEl.className = 'msg-row';
   typingEl.innerHTML = `
-    <div class="msg-avatar"><img src="${safeImageUrl(char.image)}" alt="" onerror="this.src=''"></div>
+    <div class="msg-avatar"><img src="${characterImageSource(char.image)}" alt="" onerror="this.src=''"></div>
     <div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
   container.appendChild(typingEl);
   container.scrollTop = container.scrollHeight;
@@ -3095,6 +3112,7 @@ function savePreferences(btn) {
     user.userType = getChipVal('pref-usertype', 'player');
     user.gender = getChipVal('pref-gender', 'other');
     user.chatPreference = getChipVal('pref-chatpref', 'both');
+    setHideCharacterImages(!!el('pref-hide-character-images')?.checked);
     user.isAnonymous = !!el('pref-anonymous')?.checked;
     DB.set('users', users);
     state.currentUser = user;
