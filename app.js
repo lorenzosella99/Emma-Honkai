@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.13';
+const EMMA_APP_VERSION = '0.5.14';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
