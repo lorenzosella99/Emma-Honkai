@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.8';
+const EMMA_APP_VERSION = '0.5.9';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -49,21 +49,22 @@ function startAdminUpdateWatcher() {
 const GH_FILES = { missions: 'missions.json', config: 'config.json' };
 async function ghPull() {
   let pulled = 0;
-  for (const [key] of Object.entries(GH_FILES)) {
+  const errors = [];
+  for (const [key, filename] of Object.entries(GH_FILES)) {
     try {
       const result = await emmaApi('github_sync', { direction: 'pull', key });
       if (result?.data !== undefined && result.data !== null) {
         localStorage.setItem('emma_' + key, JSON.stringify(result.data)); pulled++;
-      }
-    } catch (e) { console.warn('GitHub pull:', e.message); }
+      } else errors.push(filename + ': resposta vazia do servidor.');
+    } catch (e) { errors.push(filename + ': ' + (e.message || 'erro desconhecido')); console.warn('GitHub pull:', e.message); }
   }
-  return pulled;
+  return { pulled, errors };
 }
 async function ghPush(filename, content) {
   const key = Object.keys(GH_FILES).find(k => GH_FILES[k] === filename);
-  if (!key) return false;
-  try { await emmaApi('github_sync', { direction: 'push', key, value: content }); return true; }
-  catch (e) { console.warn('GitHub push:', e.message); return false; }
+  if (!key) return { ok:false, error:'Arquivo não permitido.' };
+  try { await emmaApi('github_sync', { direction: 'push', key, value: content }); return { ok:true }; }
+  catch (e) { console.warn('GitHub push:', e.message); return { ok:false, error:e.message || 'erro desconhecido' }; }
 }
 function ghPushKey(key) { /* escrita explícita somente por administrador autenticado */ }
 
@@ -2732,18 +2733,19 @@ async function adminSetUserRole(userId, role) {
 
 async function manualGhPull() {
   toast('Puxando dados do GitHub...', 'info');
-  const n = await ghPull();
-  if (n > 0) { toast(`${n} arquivo(s) sincronizados!`, 'success'); renderAdminPanel(); }
-  else toast('Falha ao puxar. Confira GITHUB_TOKEN nos Secrets do Supabase.', 'error');
+  const result = await ghPull();
+  if (result.pulled > 0) { toast(`${result.pulled} arquivo(s) sincronizados!${result.errors.length ? ' Alguns falharam: ' + result.errors.join(' | ') : ''}`, result.errors.length ? 'warning' : 'success'); renderAdminPanel(); }
+  else toast('Falha ao puxar: ' + (result.errors.join(' | ') || 'resposta vazia.'), 'error');
 }
 async function manualGhPush() {
   toast('Enviando dados ao GitHub...', 'info');
   let ok = 0;
+  const errors = [];
   for (const [key, file] of Object.entries(GH_FILES)) {
     const val = DB.get(key);
-    if (val !== null && await ghPush(file, val)) ok++;
+    if (val !== null) { const result = await ghPush(file, val); if (result.ok) ok++; else errors.push(file + ': ' + result.error); }
   }
-  toast(ok > 0 ? `${ok} arquivo(s) enviados!` : 'Falha ao enviar. Confira GITHUB_TOKEN e suas permissões.', ok > 0 ? 'success' : 'error');
+  toast(ok > 0 ? `${ok} arquivo(s) enviados!${errors.length ? ' Falhas: ' + errors.join(' | ') : ''}` : 'Falha ao enviar: ' + (errors.join(' | ') || 'nenhum dado local encontrado.'), errors.length ? 'warning' : ok > 0 ? 'success' : 'error');
 }
 
 async function saveConfig() {
