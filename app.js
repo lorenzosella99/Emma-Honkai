@@ -2,6 +2,49 @@
    EMMA HONKAI — App Core
    ========================================== */
 
+const EMMA_APP_VERSION = '0.5.6';
+let emmaUpdateWatcherTimer = null;
+let emmaUpdateNoticeShown = false;
+
+function showAdminUpdateNotice() {
+  if (emmaUpdateNoticeShown || !state.currentUser || !(state.currentUser.isAdmin || state.currentUser.isViceAdmin)) return;
+  emmaUpdateNoticeShown = true;
+  const notice = document.createElement('div');
+  notice.id = 'emma-update-notice';
+  notice.setAttribute('role', 'alert');
+  notice.style.cssText = 'position:fixed;z-index:100000;top:12px;left:50%;transform:translateX(-50%);width:min(560px,calc(100% - 24px));padding:14px 16px;border:1px solid #8b5cf6;border-radius:12px;background:#171323;color:#fff;box-shadow:0 8px 30px #0008;display:flex;align-items:center;justify-content:space-between;gap:12px;font:500 14px Inter,Arial,sans-serif';
+  const message = document.createElement('span');
+  message.textContent = 'O site recebeu uma pequena atualização. Recarregue o site para aplicar as mudanças.';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Recarregar agora';
+  button.style.cssText = 'flex:none;border:0;border-radius:8px;padding:9px 12px;background:#8b5cf6;color:white;font-weight:700;cursor:pointer';
+  button.addEventListener('click', () => location.reload());
+  notice.append(message, button);
+  document.body.appendChild(notice);
+}
+
+async function checkAdminSiteUpdate() {
+  if (!state.currentUser || !(state.currentUser.isAdmin || state.currentUser.isViceAdmin) || emmaUpdateNoticeShown) return;
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set('_emma_update_check', String(Date.now()));
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    if (!response.ok) return;
+    const source = await response.text();
+    const match = source.match(/id=["']app-version["'][^>]*>\\s*versão:\\s*([0-9.]+)/i);
+    if (match && match[1] !== EMMA_APP_VERSION) showAdminUpdateNotice();
+  } catch (error) {
+    console.warn('Verificação de atualização:', error);
+  }
+}
+
+function startAdminUpdateWatcher() {
+  if (!state.currentUser || !(state.currentUser.isAdmin || state.currentUser.isViceAdmin) || emmaUpdateWatcherTimer) return;
+  checkAdminSiteUpdate();
+  emmaUpdateWatcherTimer = setInterval(checkAdminSiteUpdate, 45000);
+}
+
 // ─── GITHUB DATA MIRROR — acesso sempre pelo servidor ───────────────────────
 const GH_FILES = { missions: 'missions.json', config: 'config.json' };
 async function ghPull() {
