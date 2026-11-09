@@ -93,11 +93,12 @@ function startEmmaSessionWindow() {
   }
   emmaLastActivityAt = Date.now();
   clearTimeout(emmaSessionTimer);
-  emmaSessionTimer = setTimeout(expireEmmaSession, EMMA_SESSION_LIMIT_MS);
+  emmaSessionTimer = setTimeout(checkEmmaIdleTimeout, EMMA_SESSION_LIMIT_MS);
   return true;
 }
 
-['mousemove','pointermove','keydown','mousedown','touchstart','wheel'].forEach(eventName => {
+// A sessão é renovada por movimento do mouse/ponteiro; touchmove cobre telas móveis.
+['mousemove','pointermove','touchmove'].forEach(eventName => {
   document.addEventListener(eventName, resetEmmaIdleTimer, {passive:true});
 });
 
@@ -1262,6 +1263,7 @@ function revealSensitiveCharacterImage(charId) {
     img.src = getHideCharacterImages() ? FALLBACK_SVG : (char.image || FALLBACK_SVG);
   });
   document.querySelectorAll('[data-reveal-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(button => button.remove());
+  if (state.currentChat?.charId === charId) el('chat-reveal-sensitive')?.remove();
   if (state.currentChat?.charId === charId && el('screen-chat')) {
     el('screen-chat').style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
   }
@@ -1358,6 +1360,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   const char = DB.get('characters', []).find(c => c.id === charId);
   if (!char || char.isBanned) return;
   revealedSensitiveCharacters.delete(String(charId));
+  revealedSensitiveCharacters.delete(String(charId));
   if (createNew && !isPremiumActive()) return toast('Criar várias conversas com o mesmo personagem é um benefício Emma Premium.', 'error');
   const requestKey = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2);
   const localChats = DB.get('chats', []).filter(c => c.userId === state.currentUser.id && c.charId === charId);
@@ -1369,6 +1372,18 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
   const avatar = el('chat-char-avatar-img'); avatar.src = characterImageSource(char.image,char.id,char.isPhotosensitive); avatar.alt = char.name;
+  const oldReveal = el('chat-reveal-sensitive');
+  if (oldReveal) oldReveal.remove();
+  if (char.isPhotosensitive && !getHideCharacterImages()) {
+    const reveal = document.createElement('button');
+    reveal.id = 'chat-reveal-sensitive';
+    reveal.type = 'button';
+    reveal.className = 'btn btn-secondary btn-sm';
+    reveal.textContent = 'Mostrar imagem';
+    reveal.style.marginLeft = '6px';
+    reveal.onclick = () => revealSensitiveCharacterImage(char.id);
+    avatar.parentElement.after(reveal);
+  }
   el('chat-input').disabled = true;
   el('chat-input').placeholder = 'Carregando conversa...';
   const sendButton = document.querySelector('.chat-send-btn');
