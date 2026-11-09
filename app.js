@@ -3165,26 +3165,33 @@ function triggerAvatarUpload() {
   if (inp) inp.click();
 }
 
-function handleAvatarUpload(input) {
-  const file = input.files[0];
+async function handleAvatarUpload(input) {
+  const file = input.files?.[0];
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) return toast('Imagem muito grande! Máx 2MB.', 'error');
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const base64 = e.target.result;
-    const users = DB.get('users', []);
-    const user = users.find(u => u.id === state.currentUser.id);
-    if (user) {
-      user.avatar = base64;
-      DB.set('users', users);
-      state.currentUser = user;
-      syncMyProfileFromAppUser(user).catch(console.warn);
-      const img = el('profile-avatar-img');
-      if (img) img.src = base64;
-      toast('Foto atualizada!', 'success');
+  if (!file.type.startsWith('image/')) return toast('Selecione uma imagem válida.', 'error');
+  if (file.size > 5 * 1024 * 1024) return toast('Imagem muito grande! Máx. 5MB antes da compactação.', 'error');
+  let bitmap=null, objectUrl=null;
+  try {
+    let drawable;
+    if (typeof createImageBitmap === 'function') { try { bitmap=await createImageBitmap(file); drawable=bitmap; } catch (_) {} }
+    if (!drawable) {
+      objectUrl=URL.createObjectURL(file);
+      const image=new Image();
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('Formato de imagem não reconhecido.'));image.src=objectUrl;});
+      drawable=image;
     }
-  };
-  reader.readAsDataURL(file);
+    const width=drawable.width||drawable.naturalWidth, height=drawable.height||drawable.naturalHeight;
+    const scale=Math.min(1,512/Math.max(width,height));
+    const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(width*scale)); canvas.height=Math.max(1,Math.round(height*scale));
+    const ctx=canvas.getContext('2d'); if(!ctx)throw new Error('Falha ao processar imagem.');
+    ctx.drawImage(drawable,0,0,canvas.width,canvas.height);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.68));
+    if(!blob||blob.size>180*1024)throw new Error('Não foi possível reduzir a imagem para 180 KB.');
+    const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob);});
+    const users=DB.get('users',[]),user=users.find(u=>u.id===state.currentUser.id);
+    if(user){user.avatar=base64;DB.set('users',users);state.currentUser=user;syncMyProfileFromAppUser(user).catch(console.warn);const img=el('profile-avatar-img');if(img)img.src=base64;toast('Imagem convertida para WebP leve e atualizada!','success');}
+  } catch(error) { toast('Não foi possível processar a imagem: '+(error.message||'erro desconhecido'),'error'); }
+  finally { bitmap?.close?.(); if(objectUrl)URL.revokeObjectURL(objectUrl); }
 }
 
 // ─── EDIT PREFERENCES MODAL ──────────────────────────────────────────────────
