@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.10';
+const EMMA_APP_VERSION = '0.5.11';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -296,7 +296,7 @@ async function loadEmmaBackendState() {
   const allProfiles = profiles.some(p => p.id === ownProfile.id) ? profiles : [...profiles, ownProfile];
   const users = allProfiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
-    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
+    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', lore:c.lore || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online
@@ -769,6 +769,7 @@ function coinFly(amount, x, y) {
 
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
 function showScreen(id, animate = true) {
+  document.body.classList.toggle('chat-open', id === 'screen-chat');
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.remove('slide-up');
     s.classList.add('hidden');
@@ -2923,6 +2924,7 @@ function showAddCharModal(editId = null) {
         </div>
       </div>
       <div class="field"><label>Descrição</label><textarea class="input" id="cf-desc" rows="3" style="min-height:76px">${escapeHtml(char?.description||'')}</textarea></div>
+      <div class="field"><label>Lore / História e passado do personagem</label><textarea class="input" id="cf-lore" rows="5" style="min-height:120px" placeholder="Origem, passado, mundo, relações, acontecimentos importantes, objetivos e segredos...">${escapeHtml(char?.lore||'')}</textarea><small style="color:var(--text-3)">Contexto permanente que orienta a personalidade e as respostas da IA.</small></div>
       <div class="field"><label>Início da história</label><textarea class="input" id="cf-story-intro" rows="4" style="min-height:100px" placeholder="Descreva a cena inicial, o lugar, o momento e o que está acontecendo...">${escapeHtml(char?.storyIntro||'')}</textarea><small style="color:var(--text-3)">A IA usará este texto como ponto de partida e referência para manter a continuidade do roleplay.</small></div>
       <div class="form-row">
         <div class="field"><label>Idade (anos)</label><input type="number" class="input" id="cf-age" min="0" max="200" step="1" value="${char?.ageYears ?? ''}" placeholder="Ex.: 24"></div>
@@ -3072,6 +3074,7 @@ async function saveChar(editId, btn) {
       char.role = el('cf-role').value.trim();
       if (image) char.image = image;
       char.description = el('cf-desc').value.trim();
+      char.lore = el('cf-lore').value.trim();
       char.storyIntro = el('cf-story-intro').value.trim();
       char.ageYears = ageYears;
       char.heightCm = heightCm;
@@ -3088,6 +3091,7 @@ async function saveChar(editId, btn) {
       role: el('cf-role').value.trim(),
       image: image || '',
       description: el('cf-desc').value.trim(),
+      lore: el('cf-lore').value.trim(),
       storyIntro: el('cf-story-intro').value.trim(),
       ageYears,
       heightCm,
