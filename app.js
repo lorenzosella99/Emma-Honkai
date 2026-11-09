@@ -161,7 +161,7 @@ async function syncMyProfileFromAppUser(user) {
 
 function profileToAppUser(p) {
   return {
-    id: p.id, username: p.username, isAdmin: p.role === 'admin',
+    id: p.id, username: p.username, role:p.role||'user', isAdmin: p.role === 'admin', isViceAdmin:p.role === 'vice_admin', adminPermissions:p.admin_permissions||{},
     userType: p.user_type || 'player', gender: p.gender || 'other',
     chatPreference: p.chat_preference || 'both', avatar: p.avatar || null,
     allowBotTakeover: !!p.allow_bot_takeover, isAnonymous:!!p.is_anonymous,
@@ -207,19 +207,20 @@ async function loadEmmaBackendState() {
   if (ownProfileResult.error || !ownProfileResult.data) throw (ownProfileResult.error || new Error('Perfil não encontrado.'));
   const ownProfile = ownProfileResult.data;
   const adminSession = state.currentUser?.isAdmin || ownProfile.role === 'admin';
-  const profileResult = adminSession ? await emmaApi('admin_list_profiles') : {profiles:[ownProfile]};
-  const profiles = adminSession ? (profileResult.profiles || []) : [ownProfile];
+  const viceSession = !adminSession && (state.currentUser?.isViceAdmin || ownProfile.role === 'vice_admin');
+  const profileResult = adminSession ? await emmaApi('admin_list_profiles') : viceSession ? await emmaApi('vice_dashboard') : {profiles:[ownProfile]};
+  const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
 
   // Busca só o necessário para a conta atual. Administradores continuam vendo os dados completos.
   const [charactersRows, chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,description,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
-    fetchAllEmmaRows('chats', null, adminSession
+    viceSession ? (profileResult.characters || []) : fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,description,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
+    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession
       ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'}
       : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'')}),
-    adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : Promise.resolve([]),
+    adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : viceSession ? (profileResult.reports || []) : Promise.resolve([]),
     adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
-    fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,type,target,is_new_user'}),
+    viceSession ? (profileResult.missions || []) : fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,type,target,is_new_user'}),
     emmaApi('get_public_config')
   ]);
 
@@ -229,6 +230,8 @@ async function loadEmmaBackendState() {
   const messageColumns = 'id,chat_id,sender_user_id,sender_character_id,message_type,body,created_at,is_bot';
   if (adminSession) {
     messagesRows = await fetchAllEmmaRows('messages', 'created_at', {columns:messageColumns});
+  } else if (viceSession) {
+    messagesRows = profileResult.messages || [];
   } else {
     // Divide em pequenos lotes para evitar URLs enormes em contas com muitas conversas.
     for (let i = 0; i < chatIds.length; i += 100) {
@@ -238,7 +241,8 @@ async function loadEmmaBackendState() {
     }
   }
 
-  const users = profiles.map(profileToAppUser);
+  const allProfiles = profiles.some(p => p.id === ownProfile.id) ? profiles : [...profiles, ownProfile];
+  const users = allProfiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
@@ -1019,7 +1023,7 @@ function isPremiumActive(user = state.currentUser) { return !!(user?.premiumSubs
 function applyPremiumTheme() { document.body.classList.toggle('premium-theme', isPremiumActive()); }
 function renderMainApp() {
   applyPremiumTheme();
-  if (state.currentUser.isAdmin) {
+  if (state.currentUser.isAdmin || state.currentUser.isViceAdmin) {
     el('admin-nav-btn').classList.remove('hidden');
   }
 }
@@ -1942,9 +1946,9 @@ function renderProfileTab(container) {
             <div class="section-title">Chats abertos</div>
       <div class="chat-list" id="open-chats-list"></div>
 
-      ${user.isAdmin ? `
+      ${(user.isAdmin || user.isViceAdmin) ? `
         <div style="padding:16px">
-          <button class="btn btn-danger btn-full" onclick="showAdminPanel()">⚙️ Painel Admin</button>
+          <button class="btn btn-danger btn-full" onclick="showAdminPanel()">⚙️ Painel Administrativo</button>
         </div>
       ` : ''}
 
@@ -2268,13 +2272,18 @@ function updateMissionProgress(type, value) {
 }
 
 // ─── ADMIN PANEL ─────────────────────────────────────────────────────────────
+function canAdminPermission(permission) {
+  const user=state.currentUser;
+  return !!(user?.isAdmin || (user?.isViceAdmin && user?.adminPermissions?.[permission]===true));
+}
 function showAdminPanel() {
+  if (!state.currentUser?.isAdmin && !state.currentUser?.isViceAdmin) return toast('Acesso negado.', 'error');
   showScreen('screen-admin');
   renderAdminPanel();
 }
 
 async function adminAddCoins(userId) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('manage_economy')) return toast('Acesso negado.', 'error');
   const raw = prompt('Quantas moedas Emma deseja adicionar?');
   if (raw === null) return;
   const amount = Math.floor(Number(raw));
@@ -2291,7 +2300,7 @@ async function adminAddCoins(userId) {
 }
 
 async function adminSetSubscriptionBan(userId, banned) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('manage_economy')) return toast('Acesso negado.', 'error');
   const users = DB.get('users', []); const user = users.find(u => u.id === userId);
   if (!user) return toast('Usuário não encontrado.', 'error');
   user.subscriptionRenewalBanned = !!banned; user.subscriptionRenewalBanAt = banned ? Date.now() : null; user.subscriptionRenewalBanBy = banned ? state.currentUser.id : null;
@@ -2303,7 +2312,7 @@ async function adminSetSubscriptionBan(userId, banned) {
 }
 
 function adminViewUserChats(userId, options = {}) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('view_chats')) return toast('Acesso negado.', 'error');
   const user = DB.get('users', []).find(u => u.id === userId); if (!user) return toast('Usuário não encontrado.', 'error');
   const chats = DB.get('chats', []).filter(c => c.userId === userId); const messages = DB.get('messages', {}); const chars = DB.get('characters', []);
   const container = el('admin-content');
@@ -2326,7 +2335,7 @@ function adminViewUserChats(userId, options = {}) {
 }
 
 function adminViewAllChats(options = {}) {
-  if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
+  if (!canAdminPermission('view_chats')) return toast('Acesso negado.', 'error');
   const users = DB.get('users', []); const chats = DB.get('chats', []); const container = el('admin-content');
   const screen = el('screen-admin');
   const contentScroll = container.scrollTop;
@@ -2369,6 +2378,11 @@ async function confirmAdminDeleteUser(userId, button) {
     toast(e.message || 'Não foi possível excluir a conta.', 'error');
   }
 }
+const VICE_ADMIN_PERMISSIONS=[{"key":"view_chats","label":"Ver chats"},{"key":"delete_characters","label":"Excluir personagens"},{"key":"ban_characters","label":"Banir personagens"},{"key":"ban_users","label":"Banir usuários"},{"key":"view_users","label":"Ver usuários"},{"key":"delete_users","label":"Excluir usuários"},{"key":"manage_reports","label":"Gerenciar denúncias"},{"key":"edit_characters","label":"Editar personagens"},{"key":"manage_missions","label":"Gerenciar missões"},{"key":"manage_economy","label":"Gerenciar moedas e assinaturas"},{"key":"reset_passwords","label":"Redefinir senhas"},{"key":"view_admin_logs","label":"Ver registros administrativos"}];
+async function grantViceAdmin(){const userId=el('vice-admin-candidate')?.value;if(!userId)return toast('Escolha um usuário.','error');try{await emmaApi('admin_manage_vice_admin',{userId,enabled:true});await loadEmmaBackendState();renderAdminPanel();toast('Vice-admin promovido.','success');}catch(e){toast(e.message||'Não foi possível promover.','error');}}
+async function revokeViceAdmin(userId){if(!confirm('Remover o cargo de Vice-admin e todas as permissões desta conta?'))return;try{await emmaApi('admin_manage_vice_admin',{userId,enabled:false});await loadEmmaBackendState();renderAdminPanel();toast('Cargo removido.','success');}catch(e){toast(e.message||'Não foi possível remover o cargo.','error');}}
+async function saveViceAdminPermissions(userId){const row=document.querySelector('[data-vice-admin-row="'+userId+'"]');if(!row)return;const permissions={};row.querySelectorAll('[data-vice-permission]').forEach(input=>permissions[input.dataset.vicePermission]=!!input.checked);try{await emmaApi('admin_save_vice_permissions',{userId,permissions});await loadEmmaBackendState();renderAdminPanel();toast('Permissões atualizadas.','success');}catch(e){toast(e.message||'Não foi possível salvar as permissões.','error');}}
+function applyViceAdminPanelVisibility(container){const user=state.currentUser;if(!user?.isViceAdmin)return;const allowed=key=>user.adminPermissions?.[key]===true;const canSeeCharacters=['edit_characters','delete_characters','ban_characters'].some(allowed);for(const section of container.querySelectorAll('.admin-section')){const heading=section.querySelector('.admin-section-header')?.textContent||'';if(heading.includes('Solicitações'))section.classList.add('hidden');if(heading.includes('Denúncias')&&!allowed('manage_reports'))section.classList.add('hidden');if(heading.includes('Assinaturas')||heading.includes('Configurações de Custo')||heading.includes('Sincronização'))section.classList.add('hidden');if(heading.includes('Personagens')&&!canSeeCharacters)section.classList.add('hidden');if(heading.includes('Usuários')&&!['view_users','ban_users','delete_users','view_chats','manage_economy','reset_passwords'].some(allowed))section.classList.add('hidden');if(heading.includes('Missões')&&!allowed('manage_missions'))section.classList.add('hidden');for(const button of section.querySelectorAll('button[onclick],input[onchange]')){const action=button.getAttribute('onclick')||button.getAttribute('onchange')||'';if(/adminView(All|User)Chats/.test(action)&&!allowed('view_chats'))button.classList.add('hidden');if(/showAdminDeleteCharacterModal/.test(action)&&!allowed('delete_characters'))button.classList.add('hidden');if(/showBanCharModal|unbanChar/.test(action)&&!allowed('ban_characters'))button.classList.add('hidden');if(/toggleCharOnline|showEditCharModal/.test(action)&&!allowed('edit_characters'))button.classList.add('hidden');if(/showAdminDeleteUserModal/.test(action)&&!allowed('delete_users'))button.classList.add('hidden');if(/showBanUserModal|unbanUser/.test(action)&&!allowed('ban_users'))button.classList.add('hidden');if(/adminAddCoins|adminSetSubscriptionBan/.test(action)&&!allowed('manage_economy'))button.classList.add('hidden');if(/adminResolveReport/.test(action)&&!allowed('manage_reports'))button.classList.add('hidden');if(/deleteMission|showAddMissionModal/.test(action)&&!allowed('manage_missions'))button.classList.add('hidden');if(/adminSetUserRole|manualGhPull|manualGhPush/.test(action))button.classList.add('hidden');}}}
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
@@ -2387,6 +2401,12 @@ function renderAdminPanel() {
     <div class="admin-section"><div class="admin-section-header">🚨 Denúncias pendentes (${pendingReports.length})</div>
       ${pendingReports.map(r => { const reporter=users.find(u=>u.id===r.reporterId), target=users.find(u=>u.id===r.reportedUserId), c=chars.find(x=>x.id===r.characterId); return `<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>${escapeHtml(target?.username || 'Usuário removido')}</b><div class="admin-row-sub">Denunciado por ${escapeHtml(reporter?.username || 'Personagem')} em ${escapeHtml(c?.name || 'personagem')}</div><div class="admin-row-sub">${escapeHtml(r.reason)}</div></div><button class="btn btn-secondary btn-sm" onclick="adminResolveReport('${r.id}','reviewed')">Analisada</button></div>`; }).join('') || '<div class="admin-row-sub">Nenhuma denúncia pendente.</div>'}
     </div>
+    ${state.currentUser?.isAdmin ? `
+    <div class="admin-section">
+      <div class="admin-section-header">🛡️ Gerenciar Vice-admin</div>
+      <div class="admin-row"><div class="admin-row-info"><b>Promover usuário</b><div class="admin-row-sub">O Vice-admin recebe apenas as permissões marcadas abaixo.</div></div><select class="input" id="vice-admin-candidate" style="max-width:190px"><option value="">Escolher usuário</option>${users.filter(u=>!u.isAdmin&&!u.isViceAdmin).map(u=>`<option value="${u.id}">${escapeHtml(u.username)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="grantViceAdmin()">Promover</button></div>
+      ${users.filter(u=>u.isViceAdmin).map(u=>`<div class="admin-section" data-vice-admin-row="${u.id}" style="padding:12px;margin-top:10px"><div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Vice-admin</div></div><button class="btn btn-danger btn-sm" onclick="revokeViceAdmin('${u.id}')">Remover cargo</button></div><div class="admin-row" style="flex-wrap:wrap;gap:10px">${VICE_ADMIN_PERMISSIONS.map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:.82rem"><input type="checkbox" data-vice-permission="${p.key}" ${u.adminPermissions?.[p.key]===true?'checked':''}> ${p.label}</label>`).join('')}</div><button class="btn btn-primary btn-sm" onclick="saveViceAdminPermissions('${u.id}')">Salvar permissões</button></div>`).join('')||'<div class="admin-row-sub">Nenhum Vice-admin cadastrado.</div>'}
+    </div>` : ''}
     <div class="admin-section">
       <div class="admin-section-header">🧠 Assinaturas de Pensamentos</div>
       <div class="admin-row"><span>Preço mensal</span><input class="input" id="plan-monthly" type="number" min="0" style="width:100px" value="${config.thoughtPlans?.monthly ?? 500}"></div>
@@ -2540,6 +2560,7 @@ function renderAdminPanel() {
       row.classList.toggle('hidden', !row.dataset.adminUser.includes(query));
     });
   });
+  applyViceAdminPanelVisibility(container);
 }
 
 function showAdminDeleteCharacterModal(characterId) {
