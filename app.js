@@ -112,7 +112,7 @@ async function expireEmmaSession() {
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    if (localStorage.getItem(EMMA_SESSION_STARTED_KEY)) startEmmaSessionWindow();
+    if (localStorage.getItem(EMMA_SESSION_STARTED_KEY)) checkEmmaIdleTimeout();
     if (emmaRefreshPending) scheduleEmmaBackendRefresh();
     if (state.currentUser) updateUserPresence();
   }
@@ -140,7 +140,7 @@ async function acceptLegalPolicies(button) {
 }
 
 async function emmaApi(action, payload = {}) {
-  if (state.currentUser && localStorage.getItem(EMMA_SESSION_STARTED_KEY) && Date.now() - Number(localStorage.getItem(EMMA_SESSION_STARTED_KEY)) >= EMMA_SESSION_LIMIT_MS) { await expireEmmaSession(); throw new Error('Sessão expirada.'); }
+  if (state.currentUser && Date.now() - emmaLastActivityAt >= EMMA_SESSION_LIMIT_MS) { await expireEmmaSession(); throw new Error('Sessão expirada por inatividade.'); }
   if (!emmaSupabase) throw new Error('O serviço de autenticação não carregou. Atualize a página.');
   const { data, error } = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
   if (error) {
