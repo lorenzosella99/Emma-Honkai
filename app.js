@@ -73,15 +73,17 @@ let emmaSessionTimer = null;
 let emmaSessionExpiring = false;
 let emmaLastActivityAt = Date.now();
 
+function checkEmmaIdleTimeout() {
+  if (emmaSessionExpiring) return;
+  const idleFor = Date.now() - emmaLastActivityAt;
+  if (idleFor >= EMMA_SESSION_LIMIT_MS) return expireEmmaSession();
+  emmaSessionTimer = setTimeout(checkEmmaIdleTimeout, EMMA_SESSION_LIMIT_MS - idleFor);
+}
 function resetEmmaIdleTimer() {
   if (!emmaSupabase || !localStorage.getItem(EMMA_SESSION_STARTED_KEY) || emmaSessionExpiring) return;
   emmaLastActivityAt = Date.now();
   clearTimeout(emmaSessionTimer);
-  emmaSessionTimer = setTimeout(() => {
-    const idleFor = Date.now() - emmaLastActivityAt;
-    if (idleFor >= EMMA_SESSION_LIMIT_MS) expireEmmaSession();
-    else emmaSessionTimer = setTimeout(resetEmmaIdleTimer, EMMA_SESSION_LIMIT_MS - idleFor);
-  }, EMMA_SESSION_LIMIT_MS);
+  emmaSessionTimer = setTimeout(checkEmmaIdleTimeout, EMMA_SESSION_LIMIT_MS);
 }
 
 function startEmmaSessionWindow() {
