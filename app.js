@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.12';
+const EMMA_APP_VERSION = '0.5.13';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1331,7 +1331,7 @@ function renderCharGrid(container, chars) {
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img data-sensitive-character="${c.id}" src="${c.isPhotosensitive ? FALLBACK_SVG : characterImageSource(imgSrc,c.id,false)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          <img data-sensitive-character="${c.id}" src="${getHideCharacterImages() ? FALLBACK_SVG : safeImageUrl(imgSrc)}" class="${c.isPhotosensitive ? 'photosensitive-preview' : ''}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
