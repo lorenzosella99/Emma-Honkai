@@ -1357,6 +1357,7 @@ function openPlayerChat(userId) {
 async function openChat(charId, requestedChatId = null, createNew = false) {
   const char = DB.get('characters', []).find(c => c.id === charId);
   if (!char || char.isBanned) return;
+  revealedSensitiveCharacters.delete(String(charId));
   if (createNew && !isPremiumActive()) return toast('Criar várias conversas com o mesmo personagem é um benefício Emma Premium.', 'error');
   const requestKey = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2);
   const localChats = DB.get('chats', []).filter(c => c.userId === state.currentUser.id && c.charId === charId);
