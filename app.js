@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.14';
+const EMMA_APP_VERSION = '0.5.15';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2384,6 +2384,10 @@ function canAdminPermission(permission) {
   const user=state.currentUser;
   return !!(user?.isAdmin || (user?.isViceAdmin && user?.adminPermissions?.[permission]===true));
 }
+function canEditCharacter(character) {
+  if (state.currentUser?.isAdmin) return true;
+  return !!(character && state.currentUser?.isViceAdmin && state.currentUser?.adminPermissions?.[character.isVip ? 'edit_vip_characters' : 'edit_characters'] === true);
+}
 function showAdminPanel() {
   if (!state.currentUser?.isAdmin && !state.currentUser?.isViceAdmin) return toast('Acesso negado.', 'error');
   showScreen('screen-admin');
@@ -2486,7 +2490,7 @@ async function confirmAdminDeleteUser(userId, button) {
     toast(e.message || 'Não foi possível excluir a conta.', 'error');
   }
 }
-const VICE_ADMIN_PERMISSIONS=[{"key":"delete_characters","label":"Excluir personagens"},{"key":"ban_characters","label":"Banir personagens"},{"key":"ban_users","label":"Banir usuários"},{"key":"view_users","label":"Ver usuários"},{"key":"delete_users","label":"Excluir usuários"},{"key":"manage_reports","label":"Gerenciar denúncias"},{"key":"edit_characters","label":"Editar personagens"},{"key":"manage_missions","label":"Gerenciar missões"},{"key":"manage_economy","label":"Gerenciar moedas e assinaturas"},{"key":"reset_passwords","label":"Redefinir senhas"},{"key":"view_admin_logs","label":"Ver registros administrativos"}];
+const VICE_ADMIN_PERMISSIONS=[{"key":"delete_characters","label":"Excluir personagens"},{"key":"ban_characters","label":"Banir personagens"},{"key":"ban_users","label":"Banir usuários"},{"key":"view_users","label":"Ver usuários"},{"key":"delete_users","label":"Excluir usuários"},{"key":"manage_reports","label":"Gerenciar denúncias"},{"key":"edit_characters","label":"Modificar personagens normais"},{"key":"edit_vip_characters","label":"Modificar personagens VIPs"},{"key":"manage_missions","label":"Gerenciar missões"},{"key":"manage_economy","label":"Gerenciar moedas e assinaturas"},{"key":"reset_passwords","label":"Redefinir senhas"},{"key":"view_admin_logs","label":"Ver registros administrativos"}];
 async function loadAdminAuditLogs(){
  const output=el('admin-audit-output');if(!output)return;
  output.textContent='Carregando registros...';
@@ -2503,7 +2507,7 @@ async function loadAdminAuditLogs(){
 async function grantViceAdmin(){const userId=el('vice-admin-candidate')?.value;if(!userId)return toast('Escolha um usuário.','error');try{await emmaApi('admin_manage_vice_admin',{userId,enabled:true});await loadEmmaBackendState();renderAdminPanel();toast('Vice-admin promovido.','success');}catch(e){toast(e.message||'Não foi possível promover.','error');}}
 async function revokeViceAdmin(userId){if(!confirm('Remover o cargo de Vice-admin e todas as permissões desta conta?'))return;try{await emmaApi('admin_manage_vice_admin',{userId,enabled:false});await loadEmmaBackendState();renderAdminPanel();toast('Cargo removido.','success');}catch(e){toast(e.message||'Não foi possível remover o cargo.','error');}}
 async function saveViceAdminPermissions(userId){const row=document.querySelector('[data-vice-admin-row="'+userId+'"]');if(!row)return;const permissions={};row.querySelectorAll('[data-vice-permission]').forEach(input=>permissions[input.dataset.vicePermission]=!!input.checked);try{await emmaApi('admin_save_vice_permissions',{userId,permissions});await loadEmmaBackendState();renderAdminPanel();toast('Permissões atualizadas.','success');}catch(e){toast(e.message||'Não foi possível salvar as permissões.','error');}}
-function applyViceAdminPanelVisibility(container){const user=state.currentUser;if(!user?.isViceAdmin)return;const allowed=key=>user.adminPermissions?.[key]===true;const canSeeCharacters=['edit_characters','delete_characters','ban_characters'].some(allowed);for(const section of container.querySelectorAll('.admin-section')){const heading=section.querySelector('.admin-section-header')?.textContent||'';if(heading.includes('Solicitações'))section.classList.add('hidden');if(heading.includes('Denúncias')&&!allowed('manage_reports'))section.classList.add('hidden');if(heading.includes('Assinaturas')||heading.includes('Configurações de Custo')||heading.includes('Sincronização'))section.classList.add('hidden');if(heading.includes('Personagens')&&!canSeeCharacters)section.classList.add('hidden');if(heading.includes('Usuários')&&!['view_users','ban_users','delete_users','manage_economy','reset_passwords'].some(allowed))section.classList.add('hidden');if(heading.includes('Missões')&&!allowed('manage_missions'))section.classList.add('hidden');if(heading.includes('Registros administrativos')&&!allowed('view_admin_logs'))section.classList.add('hidden');for(const button of section.querySelectorAll('button[onclick],input[onchange]')){const action=button.getAttribute('onclick')||button.getAttribute('onchange')||'';if(/adminView(All|User)Chats/.test(action))button.classList.add('hidden');if(/showAdminDeleteCharacterModal/.test(action)&&!allowed('delete_characters'))button.classList.add('hidden');if(/showBanCharModal|unbanChar/.test(action)&&!allowed('ban_characters'))button.classList.add('hidden');if(/toggleCharOnline|showEditCharModal/.test(action)&&!allowed('edit_characters'))button.classList.add('hidden');if(/showAdminDeleteUserModal/.test(action)&&!allowed('delete_users'))button.classList.add('hidden');if(/showBanUserModal|unbanUser/.test(action)&&!allowed('ban_users'))button.classList.add('hidden');if(/adminAddCoins|adminSetSubscriptionBan/.test(action)&&!allowed('manage_economy'))button.classList.add('hidden');if(/adminResolveReport/.test(action)&&!allowed('manage_reports'))button.classList.add('hidden');if(/deleteMission|showAddMissionModal/.test(action)&&!allowed('manage_missions'))button.classList.add('hidden');if(/adminSetUserRole|manualGhPull|manualGhPush/.test(action))button.classList.add('hidden');}}}
+function applyViceAdminPanelVisibility(container){const user=state.currentUser;if(!user?.isViceAdmin)return;const allowed=key=>user.adminPermissions?.[key]===true;const canSeeCharacters=['edit_characters','edit_vip_characters','delete_characters','ban_characters'].some(allowed);for(const section of container.querySelectorAll('.admin-section')){const heading=section.querySelector('.admin-section-header')?.textContent||'';if(heading.includes('Solicitações'))section.classList.add('hidden');if(heading.includes('Denúncias')&&!allowed('manage_reports'))section.classList.add('hidden');if(heading.includes('Assinaturas')||heading.includes('Configurações de Custo')||heading.includes('Sincronização'))section.classList.add('hidden');if(heading.includes('Personagens')&&!canSeeCharacters)section.classList.add('hidden');if(heading.includes('Usuários')&&!['view_users','ban_users','delete_users','manage_economy','reset_passwords'].some(allowed))section.classList.add('hidden');if(heading.includes('Missões')&&!allowed('manage_missions'))section.classList.add('hidden');if(heading.includes('Registros administrativos')&&!allowed('view_admin_logs'))section.classList.add('hidden');for(const button of section.querySelectorAll('button[onclick],input[onchange]')){const action=button.getAttribute('onclick')||button.getAttribute('onchange')||'';if(/adminView(All|User)Chats/.test(action))button.classList.add('hidden');if(/showAdminDeleteCharacterModal/.test(action)&&!allowed('delete_characters'))button.classList.add('hidden');if(/showBanCharModal|unbanChar/.test(action)&&!allowed('ban_characters'))button.classList.add('hidden');if(/toggleCharOnline|showEditCharModal|toggleCharacterPhotosensitivity/.test(action)&&!allowed('edit_characters')&&!allowed('edit_vip_characters'))button.classList.add('hidden');if(/showAdminDeleteUserModal/.test(action)&&!allowed('delete_users'))button.classList.add('hidden');if(/showBanUserModal|unbanUser/.test(action)&&!allowed('ban_users'))button.classList.add('hidden');if(/adminAddCoins|adminSetSubscriptionBan/.test(action)&&!allowed('manage_economy'))button.classList.add('hidden');if(/adminResolveReport/.test(action)&&!allowed('manage_reports'))button.classList.add('hidden');if(/deleteMission|showAddMissionModal/.test(action)&&!allowed('manage_missions'))button.classList.add('hidden');if(/adminSetUserRole|manualGhPull|manualGhPush/.test(action))button.classList.add('hidden');}}}
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
@@ -2597,23 +2601,23 @@ function renderAdminPanel() {
             <div class="admin-row-sub">${c.isPhotosensitive ? '☀️ Fotossensibilidade ativada' : 'Fotossensibilidade desativada'}</div>
           </div>
           <div class="admin-actions">
-            <button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>
+            ${canEditCharacter(c) ? `<button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>
             <label class="toggle-switch" title="Online/Offline">
               <input type="checkbox" ${c.isOnline ? 'checked' : ''} onchange="toggleCharOnline('${c.id}', this.checked)">
               <span class="toggle-slider"></span>
-            </label>
+            </label>` : ''}
             ${c.isBanned
               ? `<button class="btn btn-sm btn-secondary" onclick="unbanChar('${c.id}')">Desbanir</button>`
               : `<button class="btn btn-sm btn-danger" onclick="showBanCharModal('${c.id}')">Banir</button>`
             }
-            <button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>
+            ${canEditCharacter(c) ? `<button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>` : ''}
             <button class="btn btn-sm btn-danger" onclick="showAdminDeleteCharacterModal('${c.id}')" title="Excluir personagem">🗑️</button>
           </div>
         </div>
       `).join('')}
-      <div class="admin-row" style="justify-content:center">
+      ${canAdminPermission('edit_characters') ? `<div class="admin-row" style="justify-content:center">
         <button class="btn btn-primary btn-sm" onclick="showAddCharModal()">+ Novo Personagem</button>
-      </div>
+      </div>` : ''}
     </div>
 
     <!-- USERS -->
@@ -2765,9 +2769,9 @@ async function saveConfig() {
 }
 
 async function toggleCharacterPhotosensitivity(charId) {
-  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
   const chars = DB.get('characters', []);
   const char = chars.find(c => String(c.id) === String(charId));
+  if (!canEditCharacter(char)) return toast('Acesso negado.', 'error');
   if (!char) return;
   const nextValue = !Boolean(char.isPhotosensitive);
   try {
@@ -2782,9 +2786,9 @@ async function toggleCharacterPhotosensitivity(charId) {
 }
 
 async function toggleCharOnline(charId, isOnline) {
-  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
   const chars = DB.get('characters', []);
   const char = chars.find(c => c.id === charId);
+  if (!canEditCharacter(char)) return toast('Acesso negado.', 'error');
   if (!char) return;
   const old = char.isOnline; char.isOnline = isOnline;
   try { await emmaApi('admin_save_character', {character:char}); DB.set('characters', chars); toast('Status atualizado.', 'success'); }
@@ -2890,9 +2894,9 @@ async function deleteMission(missionId) {
 }
 
 function showAddCharModal(editId = null) {
-  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
   const chars = DB.get('characters', []);
   const char = editId ? chars.find(c => c.id === editId) : null;
+  if (editId ? !canEditCharacter(char) : !canAdminPermission('edit_characters')) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
   const imgSrc = char?.image || '';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay char-form-modal';
@@ -3049,7 +3053,9 @@ function syncCharImgUrl(input) {
 function showEditCharModal(charId) { showAddCharModal(charId); }
 
 async function saveChar(editId, btn) {
-  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
+  const existingCharacter = editId ? DB.get('characters', []).find(c => c.id === editId) : null;
+  const requestsVip = !!el('cf-is-vip')?.checked;
+  if (existingCharacter ? !canEditCharacter(existingCharacter) : (!canAdminPermission('edit_characters') || (requestsVip && !canAdminPermission('edit_vip_characters')))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
   if (charImageProcessing) return toast('Aguarde a compactação da imagem.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
