@@ -1256,15 +1256,18 @@ function characterImageSource(src, charId = '', isSensitive = false) {
   return src || FALLBACK_SVG;
 }
 function revealSensitiveCharacterImage(charId) {
-  revealedSensitiveCharacters.add(String(charId));
-  const char = DB.get('characters', []).find(c => String(c.id) === String(charId));
-  if (!char) return;
-  document.querySelectorAll('[data-sensitive-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(img => {
-    img.src = getHideCharacterImages() ? FALLBACK_SVG : (char.image || FALLBACK_SVG);
+  const id = String(charId);
+  const char = DB.get('characters', []).find(c => String(c.id) === id);
+  if (!char || !char.isPhotosensitive || getHideCharacterImages()) return;
+  revealedSensitiveCharacters.add(id);
+  document.querySelectorAll('[data-sensitive-character]').forEach(img => {
+    if (String(img.dataset.sensitiveCharacter) === id) img.src = char.image || FALLBACK_SVG;
   });
-  document.querySelectorAll('[data-reveal-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(button => button.remove());
-  if (state.currentChat?.charId === charId) el('chat-reveal-sensitive')?.remove();
-  if (state.currentChat?.charId === charId && el('screen-chat')) {
+  document.querySelectorAll('[data-reveal-character]').forEach(button => {
+    if (String(button.dataset.revealCharacter) === id) button.remove();
+  });
+  if (String(state.currentChat?.charId) === id && el('screen-chat')) {
+    el('chat-reveal-sensitive')?.remove();
     el('screen-chat').style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
   }
 }
@@ -1287,7 +1290,7 @@ function renderCharGrid(container, chars) {
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
           <img data-sensitive-character="${c.id}" src="${characterImageSource(imgSrc,c.id,c.isPhotosensitive)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
-          ${c.isPhotosensitive && !revealedSensitiveCharacters.has(String(c.id)) && !getHideCharacterImages() ? `<button class="btn btn-secondary btn-sm" data-reveal-character="${c.id}" onclick="event.stopPropagation();revealSensitiveCharacterImage('${c.id}')">Mostrar imagem</button>` : ''}
+          ${c.isPhotosensitive && c.image && !revealedSensitiveCharacters.has(String(c.id)) && !getHideCharacterImages() ? `<button class="btn btn-secondary btn-sm" data-reveal-character="${c.id}" onclick="event.stopPropagation();revealSensitiveCharacterImage('${c.id}')">Mostrar imagem</button>` : ''}
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
@@ -1360,7 +1363,6 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   const char = DB.get('characters', []).find(c => c.id === charId);
   if (!char || char.isBanned) return;
   revealedSensitiveCharacters.delete(String(charId));
-  revealedSensitiveCharacters.delete(String(charId));
   if (createNew && !isPremiumActive()) return toast('Criar várias conversas com o mesmo personagem é um benefício Emma Premium.', 'error');
   const requestKey = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2);
   const localChats = DB.get('chats', []).filter(c => c.userId === state.currentUser.id && c.charId === charId);
@@ -1374,16 +1376,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   const avatar = el('chat-char-avatar-img'); avatar.src = characterImageSource(char.image,char.id,char.isPhotosensitive); avatar.alt = char.name; avatar.dataset.sensitiveCharacter = String(char.id);
   const oldReveal = el('chat-reveal-sensitive');
   if (oldReveal) oldReveal.remove();
-  if (char.isPhotosensitive && !getHideCharacterImages()) {
-    const reveal = document.createElement('button');
-    reveal.id = 'chat-reveal-sensitive';
-    reveal.type = 'button';
-    reveal.className = 'btn btn-secondary btn-sm';
-    reveal.textContent = 'Mostrar imagem';
-    reveal.style.marginLeft = '6px';
-    reveal.onclick = () => revealSensitiveCharacterImage(char.id);
-    avatar.parentElement.after(reveal);
-  }
+  el('chat-reveal-sensitive')?.remove();
   el('chat-input').disabled = true;
   el('chat-input').placeholder = 'Carregando conversa...';
   const sendButton = document.querySelector('.chat-send-btn');
@@ -1468,10 +1461,11 @@ function renderChatScreen(char, chat) {
   img.setAttribute('data-sensitive-character', char.id);
   const headerInfo = img.closest('.chat-header')?.querySelector('.chat-header-info');
   headerInfo?.querySelectorAll('[data-reveal-character]').forEach(button => button.remove());
-  if (char.isPhotosensitive && !revealedSensitiveCharacters.has(String(char.id)) && !getHideCharacterImages() && headerInfo) {
+  if (char.isPhotosensitive && char.image && !revealedSensitiveCharacters.has(String(char.id)) && !getHideCharacterImages() && headerInfo) {
     const revealButton = document.createElement('button');
     revealButton.className = 'btn btn-secondary btn-sm';
     revealButton.textContent = 'Mostrar imagem';
+    revealButton.id = 'chat-reveal-sensitive';
     revealButton.setAttribute('data-reveal-character', char.id);
     revealButton.onclick = () => revealSensitiveCharacterImage(char.id);
     headerInfo.appendChild(revealButton);
@@ -1485,7 +1479,7 @@ function renderChatScreen(char, chat) {
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
   const backgroundImage = controllerView
     ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
-    : (char.isPhotosensitive && !revealedSensitiveCharacters.has(String(char.id)) ? '' : char.image);
+    : (getHideCharacterImages() ? '' : char.image);
   if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
 
   updateCostHints();
