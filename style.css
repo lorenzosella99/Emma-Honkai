@@ -562,8 +562,10 @@ img { display: block; }
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
-  filter: blur(9px);
   transform: scale(1.04);
+}
+#screen-chat.photosensitive-chat .chat-messages::before {
+  filter: blur(9px);
 }
 #screen-chat .chat-messages > * { position: relative; z-index: 1; }
 .msg-row {
