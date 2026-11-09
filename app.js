@@ -1371,7 +1371,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   el('chat-char-name').textContent = char.name;
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
-  const avatar = el('chat-char-avatar-img'); avatar.src = characterImageSource(char.image,char.id,char.isPhotosensitive); avatar.alt = char.name;
+  const avatar = el('chat-char-avatar-img'); avatar.src = characterImageSource(char.image,char.id,char.isPhotosensitive); avatar.alt = char.name; avatar.dataset.sensitiveCharacter = String(char.id);
   const oldReveal = el('chat-reveal-sensitive');
   if (oldReveal) oldReveal.remove();
   if (char.isPhotosensitive && !getHideCharacterImages()) {
