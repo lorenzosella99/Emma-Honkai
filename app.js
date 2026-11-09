@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.15';
+const EMMA_APP_VERSION = '0.5.16';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2382,11 +2382,13 @@ function updateMissionProgress(type, value) {
 // ─── ADMIN PANEL ─────────────────────────────────────────────────────────────
 function canAdminPermission(permission) {
   const user=state.currentUser;
-  return !!(user?.isAdmin || (user?.isViceAdmin && user?.adminPermissions?.[permission]===true));
+  if (user?.isAdmin) return true;
+  if (permission === 'edit_vip_characters' && !isPremiumActive(user)) return false;
+  return !!(user?.isViceAdmin && user?.adminPermissions?.[permission]===true);
 }
 function canEditCharacter(character) {
   if (state.currentUser?.isAdmin) return true;
-  return !!(character && state.currentUser?.isViceAdmin && state.currentUser?.adminPermissions?.[character.isVip ? 'edit_vip_characters' : 'edit_characters'] === true);
+  return !!(character && canAdminPermission(character.isVip ? 'edit_vip_characters' : 'edit_characters'));
 }
 function showAdminPanel() {
   if (!state.currentUser?.isAdmin && !state.currentUser?.isViceAdmin) return toast('Acesso negado.', 'error');
@@ -2535,7 +2537,7 @@ function renderAdminPanel() {
     <div class="admin-section">
       <div class="admin-section-header">🛡️ Gerenciar Vice-admin</div>
       <div class="admin-row"><div class="admin-row-info"><b>Promover usuário</b><div class="admin-row-sub">O Vice-admin recebe apenas as permissões marcadas abaixo.</div></div><select class="input" id="vice-admin-candidate" style="max-width:190px"><option value="">Escolher usuário</option>${users.filter(u=>!u.isAdmin&&!u.isViceAdmin).map(u=>`<option value="${u.id}">${escapeHtml(u.username)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="grantViceAdmin()">Promover</button></div>
-      ${users.filter(u=>u.isViceAdmin).map(u=>`<div class="admin-section" data-vice-admin-row="${u.id}" style="padding:12px;margin-top:10px"><div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Vice-admin</div></div><button class="btn btn-danger btn-sm" onclick="revokeViceAdmin('${u.id}')">Remover cargo</button></div><div class="admin-row" style="flex-wrap:wrap;gap:10px">${VICE_ADMIN_PERMISSIONS.map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:.82rem"><input type="checkbox" data-vice-permission="${p.key}" ${u.adminPermissions?.[p.key]===true?'checked':''}> ${p.label}</label>`).join('')}</div><button class="btn btn-primary btn-sm" onclick="saveViceAdminPermissions('${u.id}')">Salvar permissões</button></div>`).join('')||'<div class="admin-row-sub">Nenhum Vice-admin cadastrado.</div>'}
+      ${users.filter(u=>u.isViceAdmin).map(u=>`<div class="admin-section" data-vice-admin-row="${u.id}" style="padding:12px;margin-top:10px"><div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Vice-admin</div></div><button class="btn btn-danger btn-sm" onclick="revokeViceAdmin('${u.id}')">Remover cargo</button></div><div class="admin-row" style="flex-wrap:wrap;gap:10px">${VICE_ADMIN_PERMISSIONS.filter(p=>p.key!=='edit_vip_characters'||!!(u.premiumSubscription?.expiresAt&&Number(u.premiumSubscription.expiresAt)>Date.now())).map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:.82rem"><input type="checkbox" data-vice-permission="${p.key}" ${u.adminPermissions?.[p.key]===true?'checked':''}> ${p.label}</label>`).join('')}</div><button class="btn btn-primary btn-sm" onclick="saveViceAdminPermissions('${u.id}')">Salvar permissões</button></div>`).join('')||'<div class="admin-row-sub">Nenhum Vice-admin cadastrado.</div>'}
     </div>` : ''}
     <div class="admin-section">
       <div class="admin-section-header">🧠 Assinaturas de Pensamentos</div>
