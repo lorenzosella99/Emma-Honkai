@@ -71,35 +71,40 @@ const EMMA_SESSION_LIMIT_MS = 15 * 60 * 1000;
 const EMMA_SESSION_STARTED_KEY = 'emma_session_started_at';
 let emmaSessionTimer = null;
 let emmaSessionExpiring = false;
+let emmaLastActivityAt = Date.now();
+
+function resetEmmaIdleTimer() {
+  if (!emmaSupabase || !localStorage.getItem(EMMA_SESSION_STARTED_KEY) || emmaSessionExpiring) return;
+  emmaLastActivityAt = Date.now();
+  clearTimeout(emmaSessionTimer);
+  emmaSessionTimer = setTimeout(() => {
+    const idleFor = Date.now() - emmaLastActivityAt;
+    if (idleFor >= EMMA_SESSION_LIMIT_MS) expireEmmaSession();
+    else emmaSessionTimer = setTimeout(resetEmmaIdleTimer, EMMA_SESSION_LIMIT_MS - idleFor);
+  }, EMMA_SESSION_LIMIT_MS);
+}
 
 function startEmmaSessionWindow() {
   if (!emmaSupabase) return false;
-  let startedAt = Number(localStorage.getItem(EMMA_SESSION_STARTED_KEY));
-  if (localStorage.getItem('emma_session_reload_required') === '1') {
-    localStorage.removeItem('emma_session_reload_required');
-    startedAt = Date.now();
-    localStorage.setItem(EMMA_SESSION_STARTED_KEY, String(startedAt));
-  } else if (!Number.isFinite(startedAt) || startedAt <= 0) {
-    startedAt = Date.now();
-    localStorage.setItem(EMMA_SESSION_STARTED_KEY, String(startedAt));
+  if (!localStorage.getItem(EMMA_SESSION_STARTED_KEY)) {
+    localStorage.setItem(EMMA_SESSION_STARTED_KEY, String(Date.now()));
   }
-  const remaining = EMMA_SESSION_LIMIT_MS - (Date.now() - startedAt);
-  if (remaining <= 0) {
-    expireEmmaSession();
-    return false;
-  }
+  emmaLastActivityAt = Date.now();
   clearTimeout(emmaSessionTimer);
-  emmaSessionTimer = setTimeout(expireEmmaSession, remaining);
+  emmaSessionTimer = setTimeout(expireEmmaSession, EMMA_SESSION_LIMIT_MS);
   return true;
 }
+
+['mousemove','pointermove','keydown','mousedown','touchstart','wheel'].forEach(eventName => {
+  document.addEventListener(eventName, resetEmmaIdleTimer, {passive:true});
+});
 
 async function expireEmmaSession() {
   if (emmaSessionExpiring) return;
   emmaSessionExpiring = true;
   clearTimeout(emmaSessionTimer);
-  // Mantém a sessão persistida; a recarga inicia uma nova janela de 15 minutos.
   localStorage.setItem('emma_session_reload_required', '1');
-  alert('Sua sessão chegou ao limite de 15 minutos. A página será recarregada para continuar conectado.');
+  alert('Sua sessão expirou após 15 minutos sem atividade. A página será recarregada para continuar conectado.');
   location.reload();
 }
 
@@ -214,7 +219,7 @@ async function loadEmmaBackendState() {
 
   // Busca só o necessário para a conta atual. Administradores continuam vendo os dados completos.
   const [charactersRows, chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    viceSession ? (profileResult.characters || []) : fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,description,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
+    viceSession ? (profileResult.characters || []) : fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'}),
     viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession
       ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'}
       : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'')}),
@@ -244,7 +249,7 @@ async function loadEmmaBackendState() {
   const allProfiles = profiles.some(p => p.id === ownProfile.id) ? profiles : [...profiles, ownProfile];
   const users = allProfiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
-    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', description:c.description || '',
+    id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '',
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online
@@ -1242,7 +1247,21 @@ function setHideCharacterImages(enabled) {
   try { const key = 'emma_hide_character_images_' + (state.currentUser?.id || 'guest'); if (enabled) localStorage.setItem(key, '1'); else localStorage.removeItem(key); }
   catch(e) { console.warn('Falha ao salvar preferência de acessibilidade:', e); }
 }
-function characterImageSource(src) { return getHideCharacterImages() ? FALLBACK_SVG : (src || FALLBACK_SVG); }
+const revealedSensitiveCharacters = new Set();
+function characterImageSource(src, charId = '', isSensitive = false) {
+  if (getHideCharacterImages() || (isSensitive && !revealedSensitiveCharacters.has(String(charId)))) return FALLBACK_SVG;
+  return src || FALLBACK_SVG;
+}
+function revealSensitiveCharacterImage(charId) {
+  revealedSensitiveCharacters.add(String(charId));
+  const char = DB.get('characters', []).find(c => String(c.id) === String(charId));
+  if (!char) return;
+  document.querySelectorAll('[data-sensitive-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(img => {
+    img.src = getHideCharacterImages() ? FALLBACK_SVG : (char.image || FALLBACK_SVG);
+  });
+  const button = document.querySelector('[data-reveal-character="'+String(charId).replace(/["\\]/g,'')+'"]');
+  if (button) button.remove();
+}
 
 function renderCharGrid(container, chars) {
   if (!container) return;
@@ -1261,7 +1280,8 @@ function renderCharGrid(container, chars) {
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img src="${characterImageSource(imgSrc)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          <img data-sensitive-character="${c.id}" src="${characterImageSource(imgSrc,c.id,c.isPhotosensitive)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          ${c.isPhotosensitive && !revealedSensitiveCharacters.has(String(c.id)) && !getHideCharacterImages() ? `<button class="btn btn-secondary btn-sm" data-reveal-character="${c.id}" onclick="event.stopPropagation();revealSensitiveCharacterImage('${c.id}')">Mostrar imagem</button>` : ''}
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
@@ -1343,7 +1363,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   el('chat-char-name').textContent = char.name;
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
-  const avatar = el('chat-char-avatar-img'); avatar.src = char.image || ''; avatar.alt = char.name;
+  const avatar = el('chat-char-avatar-img'); avatar.src = characterImageSource(char.image,char.id,char.isPhotosensitive); avatar.alt = char.name;
   el('chat-input').disabled = true;
   el('chat-input').placeholder = 'Carregando conversa...';
   const sendButton = document.querySelector('.chat-send-btn');
@@ -2505,8 +2525,10 @@ function renderAdminPanel() {
           <div class="admin-row-info">
             <div class="admin-row-name">${escapeHtml(c.name)}</div>
             <div class="admin-row-sub">${c.isBanned ? '🚫 Banido' : (c.isOnline ? '🟢 Online' : '⚫ Offline')}</div>
+            <div class="admin-row-sub">${c.isPhotosensitive ? '☀️ Fotossensibilidade ativada' : 'Fotossensibilidade desativada'}</div>
           </div>
           <div class="admin-actions">
+            <button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>
             <label class="toggle-switch" title="Online/Offline">
               <input type="checkbox" ${c.isOnline ? 'checked' : ''} onchange="toggleCharOnline('${c.id}', this.checked)">
               <span class="toggle-slider"></span>
@@ -2670,6 +2692,24 @@ async function saveConfig() {
     Object.assign(config, result.config || next); DB.set('config', config);
     toast('Configurações salvas no servidor.', 'success');
   } catch (e) { toast(e.message || 'Não foi possível salvar.', 'error'); }
+}
+
+async function toggleCharacterPhotosensitivity(charId) {
+  if (!canAdminPermission('edit_characters')) return toast('Acesso negado.', 'error');
+  const chars = DB.get('characters', []);
+  const char = chars.find(c => String(c.id) === String(charId));
+  if (!char) return;
+  const previous = !!char.isPhotosensitive;
+  char.isPhotosensitive = !previous;
+  try {
+    await emmaApi('admin_save_character', {character:char});
+    DB.set('characters', chars);
+    toast(char.isPhotosensitive ? 'Fotossensibilidade ativada para este personagem.' : 'Fotossensibilidade desativada.', 'success');
+    renderAdminPanel();
+  } catch (e) {
+    char.isPhotosensitive = previous;
+    toast(e.message || 'Não foi possível salvar a configuração.', 'error');
+  }
 }
 
 async function toggleCharOnline(charId, isOnline) {
