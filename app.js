@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.6';
+const EMMA_APP_VERSION = '0.5.7';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1703,6 +1703,7 @@ async function sendMessage() {
     cost
   };
   const currentChar = state.currentChat.char;
+  if (state.currentUser.chatPreference === 'players' && !currentChar.ownerUserId) { toast('Sua preferência está definida para conversar somente com personagens controlados por players.', 'error'); return; }
   const owner = currentChar.ownerUserId ? DB.get('users', []).find(u => u.id === currentChar.ownerUserId) : null;
   const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
   const botWillRespond = !owner || (!ownerOnline && !!owner.allowBotTakeover);
