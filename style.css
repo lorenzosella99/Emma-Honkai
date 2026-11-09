@@ -1265,3 +1265,10 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
   user-select: none;
   backdrop-filter: blur(6px);
 }
+
+
+/* Pré-visualização protegida de personagens com fotossensibilidade */
+.char-img-wrap img.photosensitive-preview {
+  filter: blur(4px);
+  transform: scale(1.04);
+}
