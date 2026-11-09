@@ -2721,15 +2721,14 @@ async function toggleCharacterPhotosensitivity(charId) {
   const chars = DB.get('characters', []);
   const char = chars.find(c => String(c.id) === String(charId));
   if (!char) return;
-  const previous = !!char.isPhotosensitive;
-  char.isPhotosensitive = !previous;
+  const nextValue = !Boolean(char.isPhotosensitive);
   try {
-    await emmaApi('admin_save_character', {character:char});
+    const result = await emmaApi('admin_set_character_photosensitivity', {characterId:String(charId), enabled:nextValue});
+    char.isPhotosensitive = result.isPhotosensitive === true;
     DB.set('characters', chars);
     toast(char.isPhotosensitive ? 'Fotossensibilidade ativada para este personagem.' : 'Fotossensibilidade desativada.', 'success');
     renderAdminPanel();
   } catch (e) {
-    char.isPhotosensitive = previous;
     toast(e.message || 'Não foi possível salvar a configuração.', 'error');
   }
 }
