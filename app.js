@@ -32,7 +32,7 @@ async function checkAdminSiteUpdate() {
     const response = await fetch(url.toString(), { cache: 'no-store' });
     if (!response.ok) return;
     const source = await response.text();
-    const match = source.match(/id=["']app-version["'][^>]*>\\s*versão:\\s*([0-9.]+)/i);
+    const match = source.match(/id=["']app-version["'][^>]*>\s*versão:\s*([0-9.]+)/i);
     if (match && match[1] !== EMMA_APP_VERSION) showAdminUpdateNotice();
   } catch (error) {
     console.warn('Verificação de atualização:', error);
