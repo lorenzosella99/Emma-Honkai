@@ -1259,17 +1259,13 @@ function revealSensitiveCharacterImage(charId) {
   const id = String(charId);
   const char = DB.get('characters', []).find(c => String(c.id) === id);
   if (!char || !char.isPhotosensitive || getHideCharacterImages()) return;
+  if (String(state.currentChat?.charId) !== id) return;
   revealedSensitiveCharacters.add(id);
-  document.querySelectorAll('[data-sensitive-character]').forEach(img => {
-    if (String(img.dataset.sensitiveCharacter) === id) img.src = char.image || FALLBACK_SVG;
-  });
-  document.querySelectorAll('[data-reveal-character]').forEach(button => {
-    if (String(button.dataset.revealCharacter) === id) button.remove();
-  });
-  if (String(state.currentChat?.charId) === id && el('screen-chat')) {
-    el('chat-reveal-sensitive')?.remove();
-    el('screen-chat').style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
-  }
+  const avatar = el('chat-char-avatar-img');
+  if (avatar) avatar.src = char.image || FALLBACK_SVG;
+  el('chat-reveal-sensitive')?.remove();
+  const chatScreen = el('screen-chat');
+  if (chatScreen) chatScreen.style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
 }
 
 function renderCharGrid(container, chars) {
@@ -1289,8 +1285,7 @@ function renderCharGrid(container, chars) {
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img data-sensitive-character="${c.id}" src="${characterImageSource(imgSrc,c.id,c.isPhotosensitive)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
-          ${c.isPhotosensitive && c.image && !revealedSensitiveCharacters.has(String(c.id)) && !getHideCharacterImages() ? `<button class="btn btn-secondary btn-sm" data-reveal-character="${c.id}" onclick="event.stopPropagation();revealSensitiveCharacterImage('${c.id}')">Mostrar imagem</button>` : ''}
+          <img data-sensitive-character="${c.id}" src="${c.isPhotosensitive ? FALLBACK_SVG : characterImageSource(imgSrc,c.id,false)}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
@@ -1709,7 +1704,7 @@ function createTypingIndicator(char, chatId) {
   typingEl.id = 'typing_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
   typingEl.className = 'msg-row';
   typingEl.innerHTML = `
-    <div class="msg-avatar"><img src="${characterImageSource(char.image)}" alt="" onerror="this.src=''"></div>
+    <div class="msg-avatar"><img src="${characterImageSource(char.image,char.id,char.isPhotosensitive)}" alt="" onerror="this.src=''"></div>
     <div><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>`;
   container.appendChild(typingEl);
   container.scrollTop = container.scrollHeight;
