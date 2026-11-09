@@ -1261,8 +1261,7 @@ function revealSensitiveCharacterImage(charId) {
   document.querySelectorAll('[data-sensitive-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(img => {
     img.src = getHideCharacterImages() ? FALLBACK_SVG : (char.image || FALLBACK_SVG);
   });
-  const button = document.querySelector('[data-reveal-character="'+String(charId).replace(/["\\]/g,'')+'"]');
-  if (button) button.remove();
+  document.querySelectorAll('[data-reveal-character="'+String(charId).replace(/["\\]/g,'')+'"]').forEach(button => button.remove());
 }
 
 function renderCharGrid(container, chars) {
@@ -1445,8 +1444,19 @@ function renderChatScreen(char, chat) {
   el('chat-char-status').className = 'chat-header-status ' + statusClass;
   el('chat-char-status').innerHTML = `${statusDot} ${statusText}`;
   const img = el('chat-char-avatar-img');
-  img.src = char.image;
+  img.src = characterImageSource(char.image,char.id,char.isPhotosensitive);
   img.alt = char.name;
+  img.setAttribute('data-sensitive-character', char.id);
+  const headerInfo = img.closest('.chat-header')?.querySelector('.chat-header-info');
+  headerInfo?.querySelectorAll('[data-reveal-character]').forEach(button => button.remove());
+  if (char.isPhotosensitive && !revealedSensitiveCharacters.has(String(char.id)) && !getHideCharacterImages() && headerInfo) {
+    const revealButton = document.createElement('button');
+    revealButton.className = 'btn btn-secondary btn-sm';
+    revealButton.textContent = 'Mostrar imagem';
+    revealButton.setAttribute('data-reveal-character', char.id);
+    revealButton.onclick = () => revealSensitiveCharacterImage(char.id);
+    headerInfo.appendChild(revealButton);
+  }
   const chatScreen = el('screen-chat');
   const controllerView = char.ownerUserId === state.currentUser?.id;
   const newChatButton = el('chat-new-btn');
