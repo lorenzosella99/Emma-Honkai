@@ -1335,7 +1335,7 @@ function renderCharGrid(container, chars) {
         </div>
         <div class="char-info">
           <div class="char-name">${escapeHtml(c.name)} ${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : c.botCategory === 'official' ? '<span class="chip chip-verified">✓ Oficial verificado</span>' : '<span class="chip chip-verified">✓ Secundário verificado</span>'} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
-          <div class="char-role">${escapeHtml(c.role)}</div>
+          <div class="char-role">${escapeHtml(c.role)}</div>${c.authorName||c.ownerName ? `<div class="char-role">${c.authorName ? 'Autor: '+escapeHtml(c.authorName) : ''}${c.authorName&&c.ownerName ? ' · ' : ''}${c.ownerName ? 'Dono: '+escapeHtml(c.ownerName) : ''}</div>` : ''}
         </div>
       </div>
     `;
