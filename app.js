@@ -2604,7 +2604,7 @@ async function renderDailyChallengesTab(container, embedded = false) {
           <h3>Como concluir</h3>
           ${result.challenge.criteria ? `<p><strong>Critério:</strong> ${escapeHtml(result.challenge.criteria)}</p>` : ''}
           <p>A recompensa só é liberada quando a personagem demonstrar espontaneamente a reação descrita. São necessárias <strong>12 mensagens suas e 12 respostas dela</strong> hoje. A verificação considera o contexto da conversa, não apenas palavras isoladas.</p>
-          ${claimed?`<div class="daily-challenge-complete">✅ Desafio resgatado! +500.000 moedas${result.claim?.claimedAt?' · '+new Date(result.claim.claimedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):''}</div>`:`
+          ${claimed?`<div class="daily-challenge-complete">✅ Desafio resgatado! +500.000 moedas · +1 dia VIP${result.claim?.claimedAt?' · '+new Date(result.claim.claimedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):''}</div>`:`
             ${uniqueChoices.length?`<label class="daily-challenge-label" for="daily-challenge-chat">Escolha a conversa</label><select id="daily-challenge-chat" class="input daily-challenge-select">${options}</select>
             <div class="daily-challenge-actions"><button class="btn btn-secondary" onclick="openDailyChallengeChat()">Continuar história</button><button class="btn btn-primary" onclick="claimDailyChallenge(this)">Resgatar 500.000</button></div>`:'<p class="daily-challenge-empty">Você ainda não tem uma conversa disponível. Abra um personagem e comece a história para participar.</p>'}
           `}
@@ -2688,6 +2688,7 @@ function renderMissionCard(mission, user, done = false) {
       <div class="mission-info">
         <div class="mission-title">${escapeHtml(mission.title)}</div>
         <div class="mission-desc">${escapeHtml(mission.desc || mission.description)}</div>
+        ${mission.vipRewardDays ? '<div class="mission-desc">👑 Recompensa: ' + mission.vipRewardDays + ' dia(s) de Emma VIP</div>' : ''}
         <div class="mission-progress-bar">
           <div class="mission-progress-fill" style="width:${pct}%"></div>
         </div>
@@ -2709,7 +2710,7 @@ async function claimMission(missionId, event) {
     await loadEmmaBackendState();
     const rect = event.target.getBoundingClientRect();
     coinFly(result.reward, rect.left, rect.top);
-    toast(`+${result.reward}🪙${result.xpReward ? ` +${result.xpReward} XP` : ""} — ${escapeHtml(mission.title)} concluída!`, 'gold', 3000);
+    toast(`+${result.reward}🪙${result.xpReward ? ` +${result.xpReward} XP` : ""}${result.vipRewardDays ? ` +${result.vipRewardDays} dia(s) VIP` : ""} — ${escapeHtml(mission.title)} concluída!`, 'gold', 4000);
     if(result.premiumReward)toast("Nível 99 alcançado! Você recebeu 5 dias de Emma Premium grátis.","gold",5000);
     updateCoinsDisplay(); switchTab('missions'); updateNavBadges();
   } catch(e) { toast(e.message || 'Não foi possível resgatar a missão.', 'error'); }
