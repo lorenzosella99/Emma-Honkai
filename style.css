@@ -562,7 +562,6 @@ body.chat-open .bottom-nav { display: none !important; }
 #screen-chat.photosensitive-chat .chat-messages {
   background-image: linear-gradient(rgba(10,11,16,.48), rgba(10,11,16,.62)), var(--chat-character-bg, none);
 }
-#screen-chat.photosensitive-chat .msg-avatar img { filter: blur(5px); }
 #screen-chat .chat-messages > * { position: relative; z-index: 1; }
 .msg-row {
   display: flex;
@@ -1303,8 +1302,12 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 
 /* Pré-visualização protegida de personagens com fotossensibilidade */
 .char-img-wrap img.photosensitive-preview {
-  filter: blur(4px);
-  transform: scale(1.04);
+  filter: blur(11px) saturate(.58) contrast(1.16);
+  transform: scale(1.14) rotate(1.1deg) skewX(1.5deg);
+}
+#screen-chat.photosensitive-chat .msg-avatar img {
+  filter: blur(10px) saturate(.62) contrast(1.12);
+  transform: scale(1.12) rotate(.8deg) skewX(1deg);
 }
 
 
