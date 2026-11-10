@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.43';
+const EMMA_APP_VERSION = '0.5.44';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2327,6 +2327,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.44',title:'Códigos permanentes e temporários de administrador',items:['O Admin principal agora possui um código permanente de recuperação e um código temporário exclusivo para o dia seguinte.','Os códigos ficam disponíveis na aba Admin, com validade e botão para copiar.','A autenticação separa os códigos administrativos dos convites de cadastro e exige usuário e função correspondentes.']},
     {version:'0.5.43',title:'Missões de reações emocionais',items:['Os desafios diários agora pedem reações específicas: paixão, compaixão, raiva, confiança, diversão, ciúmes ou admiração.','A conclusão é avaliada no servidor, verificando se a própria personagem demonstrou a reação no roleplay.','Continuam necessárias pelo menos 5 mensagens do jogador e 5 respostas da personagem no dia.']},
     {version:'0.5.42',title:'Apagar histórico das conversas pelo Perfil',items:['Nova opção para apagar as mensagens de todos os chats da conta de jogador de uma só vez.','As conversas permanecem na lista, mas ficam vazias; a opção não aparece em contas do tipo personagem.','O histórico de atualizações e as estatísticas da conta são preservados.']},
     {version:'0.5.41',title:'Anúncios fora do painel de conversa',items:['Os espaços de propaganda passaram a ser inseridos fora do painel do chat, para usar as áreas livres da tela.']},
@@ -2856,6 +2857,29 @@ async function grantViceAdmin(){const userId=el('vice-admin-candidate')?.value;i
 async function revokeViceAdmin(userId){if(!confirm('Remover o cargo de Vice-admin e todas as permissões desta conta?'))return;try{await emmaApi('admin_manage_vice_admin',{userId,enabled:false});await loadEmmaBackendState();renderAdminPanel();toast('Cargo removido.','success');}catch(e){toast(e.message||'Não foi possível remover o cargo.','error');}}
 async function saveViceAdminPermissions(userId){const row=document.querySelector('[data-vice-admin-row="'+userId+'"]');if(!row)return;const permissions={};row.querySelectorAll('[data-vice-permission]').forEach(input=>permissions[input.dataset.vicePermission]=!!input.checked);try{await emmaApi('admin_save_vice_permissions',{userId,permissions});await loadEmmaBackendState();renderAdminPanel();toast('Permissões atualizadas.','success');}catch(e){toast(e.message||'Não foi possível salvar as permissões.','error');}}
 function applyViceAdminPanelVisibility(container){const user=state.currentUser;if(!user?.isViceAdmin)return;const allowed=key=>user.adminPermissions?.[key]===true;const canSeeCharacters=['edit_characters','edit_vip_characters','delete_characters','ban_characters','manage_bot_memory'].some(allowed);for(const section of container.querySelectorAll('.admin-section')){const heading=section.querySelector('.admin-section-header')?.textContent||'';if(heading.includes('Solicitações'))section.classList.add('hidden');if(heading.includes('Denúncias')&&!allowed('manage_reports'))section.classList.add('hidden');if(heading.includes('Assinaturas')||heading.includes('Configurações de Custo')||heading.includes('Sincronização'))section.classList.add('hidden');if(heading.includes('Personagens')&&!canSeeCharacters)section.classList.add('hidden');if(heading.includes('Usuários')&&!['view_users','ban_users','delete_users','manage_economy','reset_passwords'].some(allowed))section.classList.add('hidden');if(heading.includes('Missões')&&!allowed('manage_missions'))section.classList.add('hidden');if(heading.includes('Registros administrativos')&&!allowed('view_admin_logs'))section.classList.add('hidden');for(const button of section.querySelectorAll('button[onclick],input[onchange]')){const action=button.getAttribute('onclick')||button.getAttribute('onchange')||'';if(/adminView(All|User)Chats/.test(action))button.classList.add('hidden');if(/showAdminDeleteCharacterModal/.test(action)&&!allowed('delete_characters'))button.classList.add('hidden');if(/showBanCharModal|unbanChar/.test(action)&&!allowed('ban_characters'))button.classList.add('hidden');if(/toggleCharOnline|showEditCharModal|toggleCharacterPhotosensitivity/.test(action)&&!allowed('edit_characters')&&!allowed('edit_vip_characters'))button.classList.add('hidden');if(/showAdminDeleteUserModal/.test(action)&&!allowed('delete_users'))button.classList.add('hidden');if(/showBanUserModal|unbanUser/.test(action)&&!allowed('ban_users'))button.classList.add('hidden');if(/adminAddCoins|adminSetSubscriptionBan/.test(action)&&!allowed('manage_economy'))button.classList.add('hidden');if(/adminResolveReport/.test(action)&&!allowed('manage_reports'))button.classList.add('hidden');if(/deleteMission|showAddMissionModal/.test(action)&&!allowed('manage_missions'))button.classList.add('hidden');if(/adminSetUserRole|manualGhPull|manualGhPush/.test(action))button.classList.add('hidden');}}}
+let currentAdminAccessCodes = null;
+async function loadAdminAccessCodes() {
+  if (!state.currentUser?.isAdmin) return;
+  const output = el('admin-access-codes-output');
+  if (output) output.textContent = 'Carregando códigos com segurança…';
+  try {
+    const result = await emmaApi('admin_ensure_admin_access_codes');
+    currentAdminAccessCodes = result;
+    const target = el('admin-access-codes-output');
+    if (!target) return;
+    const date = new Date(result.notBefore);
+    const dateLabel = date.toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
+    const startLabel = date.toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
+    target.innerHTML = '<div class="admin-row" style="align-items:flex-start;flex-direction:column;gap:6px"><b>🔐 Código permanente do Admin</b><code style="display:block;white-space:normal;overflow-wrap:anywhere;user-select:all">'+escapeHtml(result.permanentCode)+'</code><button class="btn btn-secondary btn-sm" onclick="copyAdminAccessCode(\'permanent\')">Copiar permanente</button><div class="admin-row-sub">Sem vencimento. Guarde em local privado.</div></div>' +
+      '<div class="admin-row" style="align-items:flex-start;flex-direction:column;gap:6px;margin-top:12px"><b>🕛 Código temporário de amanhã — '+escapeHtml(dateLabel)+'</b><code style="display:block;white-space:normal;overflow-wrap:anywhere;user-select:all">'+escapeHtml(result.temporaryCode)+'</code><button class="btn btn-secondary btn-sm" onclick="copyAdminAccessCode(\'temporary\')">Copiar código de amanhã</button><div class="admin-row-sub">Ativo das '+escapeHtml(startLabel)+' até 23:59:59 (Brasília).</div></div>';
+  } catch (error) { const target=el('admin-access-codes-output'); if(target)target.textContent=error.message||'Não foi possível carregar os códigos.'; }
+}
+async function copyAdminAccessCode(kind) {
+  const value=kind==='permanent'?currentAdminAccessCodes?.permanentCode:currentAdminAccessCodes?.temporaryCode;
+  if(!value)return toast('Carregue os códigos antes de copiar.','error');
+  try { await navigator.clipboard.writeText(value); toast('Código copiado.','success'); }
+  catch (_) { const area=document.createElement('textarea');area.value=value;document.body.appendChild(area);area.select();const ok=document.execCommand('copy');area.remove();toast(ok?'Código copiado.':'Não foi possível copiar automaticamente.',ok?'success':'error'); }
+}
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
@@ -2867,6 +2891,7 @@ function renderAdminPanel() {
   const characterRequests = users.filter(u => u.characterRequest?.status === 'pending' && !u.assignedCharacterId && !chars.some(c => c.ownerUserId === u.id));
   const pendingReports = DB.get('reports', []).filter(r => r.status === 'pending');
   container.innerHTML = `
+    ${state.currentUser?.isAdmin ? '<div class="admin-section"><div class="admin-section-header">🔑 Códigos de acesso do Admin</div><div class="admin-row-sub">Código permanente para recuperação e código temporário já preparado para amanhã.</div><div id="admin-access-codes-output" class="admin-row-sub" style="margin-top:10px">Carregando códigos…</div><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="loadAdminAccessCodes()">Atualizar códigos</button></div>' : ''}
     <div class="admin-section">
       <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
       ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => c.controlMode !== 'bot' && (!c.ownerUserId || c.ownerUserId === u.id)).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button><button class="btn btn-secondary btn-sm" onclick="adminRejectCharacterRequest('${u.id}')">Recusar</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
@@ -3035,6 +3060,7 @@ function renderAdminPanel() {
     });
   });
   applyViceAdminPanelVisibility(container);
+  if (state.currentUser?.isAdmin) loadAdminAccessCodes();
 }
 
 function showAdminDeleteCharacterModal(characterId) {
