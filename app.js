@@ -1733,7 +1733,7 @@ async function sendMessage() {
   const type = parsed.type;
   if (!messageText) return toast('Digite o conteúdo da mensagem dentro dos delimitadores.', 'error');
   const replyTarget = activeReplyTarget;
-  const outgoingText = replyTarget ? '↪ Respondendo a ' + replyTarget.author + ': "' + replyTarget.text + '"\\n\\n' + messageText : messageText;
+  const outgoingText = replyTarget ? '↪ Respondendo a ' + replyTarget.author + ': "' + replyTarget.text + '"\n\n' + messageText : messageText;
 
   // Se quem está digitando é o controlador do personagem, a mensagem sai como personagem.
   if (state.currentChat?.char?.ownerUserId === state.currentUser.id) {
