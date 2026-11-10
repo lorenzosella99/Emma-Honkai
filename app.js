@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.29';
+const EMMA_APP_VERSION = '0.5.30';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -231,7 +231,8 @@ function profileToAppUser(p) {
     thoughtSubscriptionHistory: Array.isArray(p.thought_subscription_history) ? p.thought_subscription_history : [],
     subscriptionRenewalBanned: !!p.subscription_renewal_banned,
     bannedUntil: p.banned_until ? Date.parse(p.banned_until) : null, isPermanentlyBanned: !!p.is_permanently_banned, banReason: p.ban_reason || '',
-    coinHistory: Array.isArray(p.coin_history) ? p.coin_history : []
+    coinHistory: Array.isArray(p.coin_history) ? p.coin_history : [],
+    ageYears:p.age_years==null?null:Number(p.age_years), adultAgeVerified:!!p.adult_age_verified, adultAgeVerifiedAt:p.adult_age_verified_at||null
   };
 }
 
@@ -264,7 +265,7 @@ async function loadEmmaBackendState() {
   const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
   // Carrega os personagens da conta antes das conversas recebidas.
-  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original,author_name,owner_name,local_context'});
+  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original,author_name,owner_name,local_context,adult_age_verified,adult_age_verified_at,age_years'});
   const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
   const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
   const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
@@ -298,7 +299,7 @@ async function loadEmmaBackendState() {
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', lore:c.lore || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', localContext:c.local_context || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
-    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online, botCategory:c.bot_category === 'official' ? 'official' : 'secondary', isOriginal:!!c.is_original, authorName:c.author_name || '', ownerName:c.owner_name || ''
+    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online, botCategory:c.bot_category === 'official' ? 'official' : 'secondary', isOriginal:!!c.is_original, authorName:c.author_name || '', ownerName:c.owner_name || '', adultAgeVerified:!!c.adult_age_verified, adultAgeVerifiedAt:c.adult_age_verified_at||null
   }));
   const chats = chatsRows.map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, characterIds:Array.isArray(c.character_ids)&&c.character_ids.length?c.character_ids:[c.character_id], lastMessage:c.last_message || '',
@@ -2211,8 +2212,26 @@ async function adminSetBotCategory(characterId, category) {
   } catch(e) { toast(e.message||'Não foi possível alterar a categoria.', 'error'); }
 }
 
+
+async function adminVerifyUserAge(userId) {
+  if(!state.currentUser?.isAdmin)return toast('Somente o Admin principal pode verificar idade.','error');
+  const user=DB.get('users',[]).find(x=>x.id===userId);if(!user)return toast('Usuário não encontrado.','error');
+  if(user.adultAgeVerified){if(!confirm('Revogar a verificação de idade desta conta?'))return;try{await emmaApi('admin_set_age_verification',{kind:'user',userId,verified:false});user.adultAgeVerified=false;DB.set('users',DB.get('users',[]));toast('Verificação revogada.','success');renderAdminPanel();}catch(e){toast(e.message||'Falha ao revogar.','error');}return;}
+  const raw=prompt('Após conferir a documentação fora do sistema, informe a idade confirmada (20 a 120 anos):',String(user.ageYears??''));if(raw===null)return;const age=Number(raw);
+  if(!Number.isInteger(age)||age<=19||age>120)return toast('A idade confirmada deve ser maior que 19 anos.','error');
+  try{await emmaApi('admin_set_age_verification',{kind:'user',userId,ageYears:age,verified:true});user.ageYears=age;user.adultAgeVerified=true;DB.set('users',DB.get('users',[]));toast('Idade da conta verificada pelo Admin.','success');renderAdminPanel();}catch(e){toast(e.message||'Falha ao verificar idade.','error');}
+}
+async function adminVerifyCharacterAge(characterId) {
+  if(!state.currentUser?.isAdmin)return toast('Somente o Admin principal pode verificar idade.','error');
+  const c=DB.get('characters',[]).find(x=>x.id===characterId);if(!c)return toast('Personagem não encontrado.','error');
+  if(!c.adultAgeVerified&&(!Number.isInteger(Number(c.ageYears))||Number(c.ageYears)<=19))return toast('O personagem precisa ter idade cadastrada acima de 19 anos. Edite a ficha antes de verificar.','error');
+  if(c.adultAgeVerified&&!confirm('Revogar a verificação de idade deste personagem?'))return;
+  try{await emmaApi('admin_set_age_verification',{kind:'character',characterId,verified:!c.adultAgeVerified});c.adultAgeVerified=!c.adultAgeVerified;DB.set('characters',DB.get('characters',[]));toast(c.adultAgeVerified?'Idade do personagem verificada.':'Verificação revogada.','success');renderAdminPanel();}catch(e){toast(e.message||'Falha ao alterar verificação.','error');}
+}
+
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.30',title:'Alterações privadas no VIP e verificação de idade com o Admin',items:['Verificação administrativa separada para conta do usuário e personagem.','Elegibilidade de temas maduros permitidos exige conta aprovada, personagem VIP, idade acima de 19 anos e aprovação do Admin principal.','Aprovações e revogações são registradas no servidor; alterações na idade do personagem invalidam a aprovação anterior.']},
     {version:'0.5.29',title:'Memória e contexto local dos bots',items:['Admin pode editar o dump de memória/contexto local de cada bot.','O Admin principal pode conceder a permissão específica a Vice-admins.','O contexto salvo é incluído nas instruções do bot nas próximas respostas.']},
     {version:'0.5.28',title:'Histórico de atualizações',items:['A versão agora é clicável e abre este registro de alterações.']},
     {version:'0.5.27',title:'Respostas coerentes com o histórico',items:['O bot verifica se a resposta mantém continuidade com a conversa.','Quando detecta uma incoerência clara, tenta gerar uma resposta corrigida usando o contexto recente.']},
@@ -2265,6 +2284,7 @@ function showAdminCharacterActionsModal(characterId) {
   if(canEdit) actions+='<button class="btn btn-secondary btn-full" data-action="edit">✏️ Editar personagem</button><button class="btn btn-secondary btn-full" data-action="online">'+(c.isOnline?'⚫ Marcar offline':'🟢 Marcar online')+'</button>';
   if(canBan) actions+='<button class="btn btn-secondary btn-full" data-action="ban">'+(c.isBanned?'Desbanir personagem':'🚫 Banir personagem')+'</button>';
   if(canMemory) actions+='<button class="btn btn-secondary btn-full" data-action="memory">🧠 Memória / contexto local</button>';
+  if(admin) actions+='<button class="btn btn-secondary btn-full" data-action="age">'+(c.adultAgeVerified?'Revogar verificação +19':'Verificar idade +19')+' · '+(c.ageYears??'idade não informada')+'</button>';
   if(admin) actions+='<button class="btn btn-secondary btn-full" data-action="owner">👤 Trocar usuário controlador</button><label class="field"><span>Categoria do bot</span><select class="input" id="admin-character-category" '+(c.isOriginal?'disabled':'')+'><option value="official" '+(c.botCategory==='official'?'selected':'')+'>Bot oficial</option><option value="secondary" '+(c.botCategory!=='official'?'selected':'')+'>Bot secundário</option></select></label>';
   if(canDelete) actions+='<button class="btn btn-danger btn-full" data-action="delete">🗑️ Excluir personagem</button>';
   const overlay=document.createElement('div');overlay.className='modal-overlay';
@@ -2277,6 +2297,7 @@ function showAdminCharacterActionsModal(characterId) {
   modal.querySelector('[data-action="ban"]')?.addEventListener('click',()=>{close();c.isBanned?unbanChar(characterId):showBanCharModal(characterId);});
   modal.querySelector('[data-action="owner"]')?.addEventListener('click',()=>{close();adminChangeCharacterOwner(characterId);});
   modal.querySelector('[data-action="memory"]')?.addEventListener('click',()=>{close();showBotLocalMemoryEditor(characterId);});
+  modal.querySelector('[data-action="age"]')?.addEventListener('click',()=>{close();adminVerifyCharacterAge(characterId);});
   modal.querySelector('[data-action="delete"]')?.addEventListener('click',()=>{close();showAdminDeleteCharacterModal(characterId);});
   modal.querySelector('#admin-character-category')?.addEventListener('change',e=>adminSetBotCategory(characterId,e.target.value));
 }
@@ -2764,7 +2785,7 @@ function renderAdminPanel() {
         <div class="admin-row" data-admin-user="${escapeHtml(u.username).toLowerCase()}">
           <div class="admin-row-info">
             <div class="admin-row-name">${escapeHtml(u.username)} ${u.isAdmin ? '<span class="chip chip-red" style="font-size:.6rem">ADMIN</span>' : u.isViceAdmin ? '<span class="chip" style="font-size:.6rem">VICE-ADMIN</span>' : ''}</div>
-            <div class="admin-row-sub">🪙 ${u.coins} · ${u.totalMessages||0} msgs · desde ${formatDate(u.joinDate)}</div>
+            <div class="admin-row-sub">🪙 ${u.coins} · ${u.totalMessages||0} msgs · desde ${formatDate(u.joinDate)} · idade: ${u.ageYears??'não informada'} · ${u.adultAgeVerified?'🔞 idade verificada':'idade não verificada'}</div>
           </div>
           <div class="admin-actions">
             <button class="btn btn-xs btn-secondary" onclick="adminResetPassword('${u.id}')" title="Redefinir senha">🔑</button>
@@ -2774,6 +2795,7 @@ function renderAdminPanel() {
               ? `<button class="btn btn-xs btn-secondary" onclick="adminSetSubscriptionBan('${u.id}', false)">Liberar renovação</button>`
               : `<button class="btn btn-xs btn-danger" onclick="adminSetSubscriptionBan('${u.id}', true)">Bloquear renovação</button>`
             }
+            ${state.currentUser?.isAdmin ? `<button class="btn btn-xs btn-secondary" onclick="adminVerifyUserAge('${u.id}')">${u.adultAgeVerified?'Revogar idade':'Verificar +19'}</button>` : ''}
             <button class="btn btn-xs btn-secondary" onclick="adminViewUserChats('${u.id}')">Ver chats</button>
             ${u.id !== state.currentUser.id ? `<button class="btn btn-xs btn-danger" onclick="showAdminDeleteUserModal('${u.id}')" title="Excluir usuário">🗑️ Excluir</button>` : ''}
             ${u.bannedUntil && Date.now() < u.bannedUntil
