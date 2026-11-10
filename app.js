@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.31';
+const EMMA_APP_VERSION = '0.5.32';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1212,13 +1212,13 @@ function renderCharsTab(container) {
     </div>
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
-      <div class="bot-directory-filters" style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter!=='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
-      <div class="section-title">⭐ Bots oficiais</div>
+      <div class="bot-directory-filters" style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${(!state.characterFilter||state.characterFilter==='normal')?'active':''}" onclick="setCharacterFilter('normal')">Normais</button>${isPremiumActive() ? `<button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button>` : ''}<button class="chip-select ${state.characterFilter==='players'?'active':''}" onclick="setCharacterFilter('players')">🎮 Só jogadores</button></div></div>
+      <div class="section-title" id="bots-official-title">⭐ Bots oficiais</div>
       <div style="padding:0 16px 8px;color:var(--text-3);font-size:.8rem">Personagens oficiais do Emma Honkai. Emma é a principal e original.</div>
       <div class="chars-grid" id="chars-grid-bots-official">
         ${Array(2).fill(skeletonCard).join('')}
       </div>
-      <div class="section-title" style="margin-top:14px">🤖 Bots secundários</div>
+      <div class="section-title" id="bots-secondary-title" style="margin-top:14px">🤖 Bots secundários</div>
       <div class="chars-grid" id="chars-grid-bots-secondary">
         ${Array(2).fill(skeletonCard).join('')}
       </div>
@@ -1242,7 +1242,7 @@ function setCharPref(pref) {
   switchTab('chars');
 }
 
-function setCharacterFilter(filter) { state.characterFilter=filter==="vip"?"vip":"normal"; switchTab("chars"); }
+function setCharacterFilter(filter) { state.characterFilter=filter==="vip"&&isPremiumActive()?"vip":filter==="players"?"players":"normal"; switchTab("chars"); }
 
 function _renderCharsContent(pref) {
   const chars = DB.get('characters', []);
@@ -1250,7 +1250,7 @@ function _renderCharsContent(pref) {
   const category=state.characterFilter||"normal";
 
   // Apply gender filter to bots
-  let bots = chars.filter(c => !c.isBanned && !c.ownerUserId && (category==="vip"?c.isVip:!c.isVip));
+  let bots = category==="players" ? [] : chars.filter(c => !c.isBanned && !c.ownerUserId && (category==="vip"&&isPremiumActive()?c.isVip:!c.isVip));
   if (pref === 'female') bots = bots.filter(c => c.gender === 'female');
   else if (pref === 'male') bots = bots.filter(c => c.gender === 'male');
   const officialBots = bots.filter(c => c.botCategory === 'official').sort((a,b)=>Number(!!b.isOriginal)-Number(!!a.isOriginal));
@@ -1275,12 +1275,16 @@ function _renderCharsContent(pref) {
   const gpPlayers = el('chars-grid-players');
   const playersSec = el('players-section');
 
-  if (gbOfficial) renderCharGrid(gbOfficial, officialBots);
-  if (gbSecondary) renderCharGrid(gbSecondary, secondaryBots);
+  const playersOnly=category==="players";
+  const officialTitle=el('bots-official-title'), secondaryTitle=el('bots-secondary-title');
+  if (gbOfficial) { gbOfficial.style.display=playersOnly?'none':''; renderCharGrid(gbOfficial, officialBots); }
+  if (gbSecondary) { gbSecondary.style.display=playersOnly?'none':''; renderCharGrid(gbSecondary, secondaryBots); }
+  if (officialTitle) officialTitle.style.display=playersOnly?'none':'';
+  if (secondaryTitle) secondaryTitle.style.display=playersOnly?'none':'';
   if (gpPlayers) {
     gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
     emmaApi("creator_directory",{}).then(({creators=[]})=>{
-      const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+      const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="players"?true:category==="vip"&&isPremiumActive()?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
       renderPlayerGrid(gpPlayers,filtered);
     }).catch(()=>{gpPlayers.innerHTML='<div class="admin-row-sub">Não foi possível carregar os criadores.</div>';});
   }
@@ -1365,7 +1369,7 @@ async function toggleCreatorFollow(userId,follow) {
     const target=creators.find(c=>c.userId===userId);
     if(target)toast(target.mutual?"Seguimento mútuo! Detalhes liberados.":(follow?"Você está seguindo o criador.":"Você deixou de seguir."),"success");
     const pref=state.currentUser.chatPreference||"both",category=state.characterFilter||"normal";
-    const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="vip"?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+    const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="players"?true:category==="vip"&&isPremiumActive()?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
     renderPlayerGrid(el("chars-grid-players"),filtered);
   } catch(e) { toast(e.message||"Não foi possível atualizar o seguimento.","error"); }
 }
