@@ -2593,7 +2593,8 @@ async function renderDailyChallengesTab(container, embedded = false) {
         </div>
         <div class="daily-challenge-card">
           <h3>Como concluir</h3>
-          <p>Seu objetivo é conseguir a reação emocional descrita acima. A recompensa só é liberada quando a própria personagem demonstrar essa reação na conversa. Também são necessárias <strong>5 mensagens suas e 5 respostas dela</strong> hoje.</p>
+          ${result.challenge.criteria ? `<p><strong>Critério:</strong> ${escapeHtml(result.challenge.criteria)}</p>` : ''}
+          <p>A recompensa só é liberada quando a personagem demonstrar espontaneamente a reação descrita. São necessárias <strong>12 mensagens suas e 12 respostas dela</strong> hoje. A verificação considera o contexto da conversa, não apenas palavras isoladas.</p>
           ${claimed?`<div class="daily-challenge-complete">✅ Desafio resgatado! +500.000 moedas${result.claim?.claimedAt?' · '+new Date(result.claim.claimedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):''}</div>`:`
             ${uniqueChoices.length?`<label class="daily-challenge-label" for="daily-challenge-chat">Escolha a conversa</label><select id="daily-challenge-chat" class="input daily-challenge-select">${options}</select>
             <div class="daily-challenge-actions"><button class="btn btn-secondary" onclick="openDailyChallengeChat()">Continuar história</button><button class="btn btn-primary" onclick="claimDailyChallenge(this)">Resgatar 500.000</button></div>`:'<p class="daily-challenge-empty">Você ainda não tem uma conversa disponível. Abra um personagem e comece a história para participar.</p>'}
@@ -2920,14 +2921,14 @@ function renderAdminPanel() {
   const characterRequests = users.filter(u => u.characterRequest?.status === 'pending' && !u.assignedCharacterId && !chars.some(c => c.ownerUserId === u.id));
   const pendingReports = DB.get('reports', []).filter(r => r.status === 'pending');
   container.innerHTML = `
-    \${canAdminPermission('manage_missions') ? \`
+    ${canAdminPermission('manage_missions') ? `
     <div class="admin-section">
       <div class="admin-section-header">🎯 Criar desafio diário com IA</div>
       <div class="admin-row-sub">Escreva uma instrução simples. A IA gratuita transforma em um desafio; o servidor valida a conclusão. O novo desafio vale para hoje.</div>
       <textarea class="input" id="admin-daily-challenge-prompt" rows="3" maxlength="500" placeholder="Ex.: crie um desafio de confiança que exija uma conversa longa e uma revelação espontânea da personagem" style="width:100%;margin-top:10px;resize:vertical"></textarea>
       <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="adminGenerateDailyChallenge(this)">Gerar e publicar desafio de hoje</button>
       <div id="admin-daily-challenge-result" class="admin-row-sub" style="margin-top:10px"></div>
-    </div>\` : ''}
+    </div>` : ''}
     ${state.currentUser?.isAdmin ? '<div class="admin-section"><div class="admin-section-header">🔑 Códigos de acesso do Admin</div><div class="admin-row-sub">Código permanente para recuperação e código temporário já preparado para amanhã.</div><div id="admin-access-codes-output" class="admin-row-sub" style="margin-top:10px">Carregando códigos…</div><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="loadAdminAccessCodes()">Atualizar códigos</button></div>' : ''}
     <div class="admin-section">
       <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
