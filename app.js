@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.20';
+const EMMA_APP_VERSION = '0.5.21';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -268,7 +268,7 @@ async function loadEmmaBackendState() {
   const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
   const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
   const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession ? {columns:'id,user_id,character_id,last_message,last_time,unread,created_at'} : {columns:'id,user_id,character_id,last_message,last_time,unread,created_at',or:characterChatFilter}),
+    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession ? {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,created_at'} : {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,created_at',or:characterChatFilter}),
     adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : viceSession ? (profileResult.reports || []) : Promise.resolve([]),
     adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
     viceSession ? (profileResult.missions || []) : fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,type,target,is_new_user'}),
@@ -301,7 +301,7 @@ async function loadEmmaBackendState() {
     ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online
   }));
   const chats = chatsRows.map(c => ({
-    id:c.id, userId:c.user_id, charId:c.character_id, lastMessage:c.last_message || '',
+    id:c.id, userId:c.user_id, charId:c.character_id, characterIds:Array.isArray(c.character_ids)&&c.character_ids.length?c.character_ids:[c.character_id], lastMessage:c.last_message || '',
     lastTime:Date.parse(c.last_time || c.created_at), unread:c.unread || 0, createdAt:Date.parse(c.created_at)
   }));
   const messages = {};
@@ -1429,7 +1429,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
     });
     if (state.currentChat?.openRequest !== requestKey) return;
     const row = result.chat;
-    const chat = { id:row.id, userId:row.user_id, charId:row.character_id,
+    const chat = { id:row.id, userId:row.user_id, charId:row.character_id, characterIds:Array.isArray(row.character_ids)&&row.character_ids.length?row.character_ids:[row.character_id],
       createdAt:Date.parse(row.created_at), lastMessage:row.last_message || '',
       lastTime:Date.parse(row.last_time || row.created_at), unread:row.unread || 0 };
     const chats = DB.get('chats', []).filter(c => c.id !== chat.id);
@@ -1458,6 +1458,16 @@ function startNewCharacterChat() {
   if (!charId) return;
   openChat(charId, null, true);
 }
+
+async function manageChatBots() {
+  const chat=DB.get('chats',[]).find(c=>c.id===state.currentChat?.chatId); if(!chat||state.currentChat?.char?.ownerUserId===state.currentUser?.id)return;
+  const chars=DB.get('characters',[]).filter(c=>!c.isBanned&&c.id!==chat.charId&&c.controlMode!=='users'); if(!chars.length)return toast('Não há outros bots disponíveis.','info');
+  const overlay=document.createElement('div');overlay.className='modal-overlay';overlay.id='chat-bots-modal';const modal=document.createElement('div');modal.className='modal';modal.style.maxWidth='440px';
+  modal.innerHTML='<div class="modal-header"><h3>🤖 Bots neste chat</h3><button class="modal-close">×</button></div><p class="admin-row-sub">Selecione até 5 bots adicionais. O fundo continuará sendo o padrão da Emma.</p><div id="chat-bots-options" style="max-height:45vh;overflow:auto"></div><div class="modal-actions"><button class="btn btn-secondary" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>Salvar</button></div>';
+  overlay.append(modal);document.body.append(overlay);modal.querySelector('.modal-close').onclick=()=>overlay.remove();modal.querySelector('[data-cancel]').onclick=()=>overlay.remove();modal.querySelector('[data-save]').onclick=saveChatBots;
+  const chosen=new Set(chat.characterIds||[chat.charId]);modal.querySelector('#chat-bots-options').innerHTML=chars.map(c=>'<label class="admin-row" style="justify-content:flex-start"><input type="checkbox" value="'+escapeHtml(c.id)+'" '+(chosen.has(c.id)?'checked':'')+'><span>'+escapeHtml(c.name)+'</span></label>').join('');
+}
+async function saveChatBots(){const modal=el('chat-bots-modal'),chat=DB.get('chats',[]).find(c=>c.id===state.currentChat?.chatId);if(!modal||!chat)return;const ids=[chat.charId,...Array.from(modal.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value)];if(ids.length>6)return toast('O limite é de 6 personagens por chat.','error');try{await emmaApi('set_chat_character_ids',{chatId:chat.id,characterIds:[...new Set(ids)]});chat.characterIds=[...new Set(ids)];DB.set('chats',DB.get('chats',[]));modal.remove();toast('Bots adicionados ao chat.','success');}catch(e){toast(e.message||'Não foi possível salvar os bots.','error');}}
 
 async function resetCurrentChat() {
   const chatId = state.currentChat?.chatId;
@@ -1512,6 +1522,8 @@ function renderChatScreen(char, chat) {
   const controllerView = char.ownerUserId === state.currentUser?.id;
   const newChatButton = el('chat-new-btn');
   const resetChatButton = el('chat-reset-btn');
+  const botsButton = el('chat-bots-btn');
+  if (botsButton) botsButton.classList.toggle('hidden', controllerView);
   if (newChatButton) newChatButton.classList.toggle('hidden', controllerView || !isPremiumActive());
   if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
@@ -1847,6 +1859,11 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
         }
       }
       if (i < ordered.length - 1) await sleep(450);
+    }
+    const groupChat=DB.get('chats',[]).find(c=>c.id===activeChat.chatId);
+    for(const extraId of (groupChat?.characterIds||[]).filter(id=>id&&id!==char.id).slice(0,5)){
+      if(state.currentChat?.chatId!==activeChat.chatId)break;const extra=DB.get('characters',[]).find(c=>c.id===extraId&&!c.isBanned);if(!extra||extra.controlMode==='users')continue;
+      try{const result=await emmaApi('generate_character_reply',{chatId:activeChat.chatId,characterId:extra.id});if(result?.id&&result.text)await addMessage({id:result.id,senderId:extra.id,chatId:activeChat.chatId,type:'speech',text:String(result.text).slice(0,4000),timestamp:Date.now(),isBot:true,isPersisted:true});}catch(err){console.warn('Bot adicional falhou:',extra.name,err.message);}
     }
   } catch (e) {
     console.error('Falha ao gerar resposta da Emma:', e);
