@@ -544,12 +544,7 @@ body.chat-open .bottom-nav { display: none !important; }
  .chat-messages {
   position: relative;
   isolation: isolate;
-  background-color: rgba(10,11,16,.55);
-  background-image: linear-gradient(rgba(10,11,16,.48), rgba(10,11,16,.62)), var(--chat-character-bg, none);
-  background-position: center center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
+  background: rgba(10,11,16,.55);
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -559,8 +554,23 @@ body.chat-open .bottom-nav { display: none !important; }
   gap: 12px;
   scroll-behavior: smooth;
 }
-#screen-chat.photosensitive-chat .chat-messages {
-  background-image: linear-gradient(rgba(10,11,16,.48), rgba(10,11,16,.62)), var(--chat-character-bg, none);
+.chat-messages::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(10,11,16,.54), rgba(10,11,16,.66)), var(--chat-character-bg, none);
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(7px);
+  transform: scale(1.04);
+}
+#screen-chat.photosensitive-chat .chat-messages::before {
+  filter: blur(22px) saturate(.35) contrast(.85);
+  transform: scale(1.12) rotate(.7deg);
+  background-image: linear-gradient(rgba(10,11,16,.78), rgba(10,11,16,.84)), var(--chat-character-bg, none);
 }
 #screen-chat .chat-messages > * { position: relative; z-index: 1; }
 .msg-row {
