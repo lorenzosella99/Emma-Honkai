@@ -1272,3 +1272,7 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
   filter: blur(4px);
   transform: scale(1.04);
 }
+
+
+/* Selo visual dos personagens oficiais e secundários verificados */
+.chip-verified{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(59,130,246,.38);background:rgba(37,99,235,.13);color:#93c5fd;font-weight:700;}
