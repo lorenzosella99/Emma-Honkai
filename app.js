@@ -2558,7 +2558,7 @@ async function renderDailyChallengesTab(container, embedded = false) {
         </div>
       </div>`;
   } catch(error) {
-    container.innerHTML='<div class="app-header"><div class="header-title">💞 Desafios diários</div></div><div class="daily-challenge-card">Não foi possível carregar o desafio. '+escapeHtml(error.message||'Tente novamente.')+' <button class="btn btn-secondary" onclick="switchTab(\'challenges\')">Tentar novamente</button></div>';
+    container.innerHTML=(embedded ? '' : '<div class="app-header"><div class="header-title">💞 Desafios diários</div></div>')+'<div class="daily-challenge-card">Não foi possível carregar o desafio. '+escapeHtml(error.message||'Tente novamente.')+' <button class="btn btn-secondary" onclick="renderDailyChallengesTab(el(\'daily-challenge-inline\') || el(\'tab-content\'), '+(embedded?'true':'false')+')">Tentar novamente</button></div>';
   }
 }
 function getDailyChallengeSelection() {
