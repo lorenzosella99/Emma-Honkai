@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.37';
+const EMMA_APP_VERSION = '0.5.38';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1316,7 +1316,11 @@ function revealSensitiveCharacterImage(charId) {
   if (avatar) avatar.src = char.image || FALLBACK_SVG;
   el('chat-reveal-sensitive')?.remove();
   const chatScreen = el('screen-chat');
-  if (chatScreen && chatScreen.classList.contains('photosensitive-chat')) chatScreen.style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
+  if (chatScreen) {
+    // Mostrar a imagem no chat também remove o filtro visual aplicado ao fundo e aos avatares.
+    chatScreen.classList.remove('photosensitive-chat');
+    chatScreen.style.setProperty('--chat-character-bg', char.image ? `url("${safeImageUrl(char.image)}")` : 'none');
+  }
 }
 
 function renderCharGrid(container, chars) {
