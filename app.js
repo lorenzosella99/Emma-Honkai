@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.23';
+const EMMA_APP_VERSION = '0.5.24';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1211,7 +1211,7 @@ function renderCharsTab(container) {
     </div>
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
-      <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter!=='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
+      <div class="bot-directory-filters" style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter!=='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
       <div class="section-title">⭐ Bots oficiais</div>
       <div style="padding:0 16px 8px;color:var(--text-3);font-size:.8rem">Personagens oficiais do Emma Honkai. Emma é a principal e original.</div>
       <div class="chars-grid" id="chars-grid-bots-official">
