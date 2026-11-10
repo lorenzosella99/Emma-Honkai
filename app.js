@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.35';
+const EMMA_APP_VERSION = '0.5.36';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2292,6 +2292,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.36',title:'Desafios diários dentro de Missões',items:['O desafio narrativo diário agora aparece diretamente na aba Missões, acima das missões comuns.','A recompensa de 500.000 moedas continua validada pelo servidor e pode ser resgatada uma vez por dia.']},
     {version:'0.5.35',title:'Desafios diários com recompensa narrativa',items:['Nova aba de desafios com histórias de roleplay que mudam diariamente.','Recompensa de 500.000 moedas por dia, validada pelo servidor após pelo menos 5 mensagens do usuário e 5 respostas da personagem.']},
     {version:'0.5.34',title:'Proteção visual reforçada para fotossensibilidade',items:['Imagens de personagens marcados com fotossensibilidade agora recebem desfoque mais forte e distorção visual adicional.','Avatares desses personagens no chat também ficam mais desfocados.']},
     {version:'0.5.33',title:'Ferramentas e contato nos chats',items:['Copiar mensagens e responder citando uma mensagem anterior.','Horário completo disponível ao tocar ou passar sobre o horário da mensagem.','Banners “Sua propaganda aqui” nos dois cantos do chat; ambos abrem o contato do Admin e permitem copiar o usuário @lorenzov10.','Indicador de digitação e avisos de mensagens não lidas continuam disponíveis.']},
@@ -2517,8 +2518,8 @@ function renderOpenChats(container, chats) {
 
 // ─── DESAFIOS DIÁRIOS ─────────────────────────────────────────────────────────
 let dailyChallengeData = null;
-async function renderDailyChallengesTab(container) {
-  container.innerHTML = '<div class="app-header"><div class="header-title">💞 Desafios diários</div><div class="header-coins">🪙 <span class="coins-display">'+Number(state.currentUser?.coins||0).toLocaleString('pt-BR')+'</span></div></div><div class="daily-challenge-loading">Carregando desafio de hoje…</div>';
+async function renderDailyChallengesTab(container, embedded = false) {
+  container.innerHTML = (embedded ? '' : '<div class="app-header"><div class="header-title">💞 Desafios diários</div><div class="header-coins">🪙 <span class="coins-display">'+Number(state.currentUser?.coins||0).toLocaleString('pt-BR')+'</span></div></div>') + '<div class="daily-challenge-loading">Carregando desafio de hoje…</div>';
   try {
     const result = await emmaApi('get_daily_challenge');
     dailyChallengeData = result;
@@ -2537,7 +2538,7 @@ async function renderDailyChallengesTab(container) {
     const options=uniqueChoices.map(item=>'<option value="'+escapeHtml(item.chatId)+'|'+escapeHtml(item.characterId)+'">'+escapeHtml(item.label.slice(0,90))+'</option>').join('');
     const claimed=result.claimed;
     container.innerHTML=`
-      <div class="app-header"><div class="header-title">💞 Desafios diários</div><div class="header-coins">🪙 <span class="coins-display">${Number(user.coins||0).toLocaleString('pt-BR')}</span></div></div>
+      ${embedded ? '' : `<div class="app-header"><div class="header-title">💞 Desafios diários</div><div class="header-coins">🪙 <span class="coins-display">${Number(user.coins||0).toLocaleString('pt-BR')}</span></div></div>`}
       <div class="daily-challenge-wrap">
         <div class="daily-challenge-hero">
           <div class="daily-challenge-kicker">DESAFIO DE HOJE · ${escapeHtml(result.date.split('-').reverse().join('/'))}</div>
@@ -2580,7 +2581,7 @@ async function claimDailyChallenge(button) {
     const rect=button.getBoundingClientRect();
     coinFly(result.reward,rect.left,rect.top);
     toast('+500.000 moedas — desafio diário concluído!','gold',4500);
-    updateCoinsDisplay();switchTab('challenges');updateNavBadges();
+    updateCoinsDisplay();switchTab('missions');updateNavBadges();
   } catch(error) {
     toast(error.message||'Não foi possível concluir o desafio.','error');
     button.disabled=false;button.textContent='Resgatar 500.000';
@@ -2607,6 +2608,8 @@ function renderMissionsTab(container) {
           <div style="font-size:.8rem;color:var(--text-2)">Complete as missões iniciais para ganhar moedas e desbloquear conteúdo!</div>
         </div>
       ` : ''}
+      <div class="section-title">💞 Desafio diário</div>
+      <div id="daily-challenge-inline"></div>
       <div class="section-title">Ativas (${activeMissions.length})</div>
       ${activeMissions.map(m => renderMissionCard(m, user)).join('')}
       ${doneMissions.length ? `
@@ -2616,6 +2619,8 @@ function renderMissionsTab(container) {
       <div style="height:16px"></div>
     </div>
   `;
+  const challengeContainer = el('daily-challenge-inline');
+  if (challengeContainer) renderDailyChallengesTab(challengeContainer, true);
 }
 
 function renderMissionCard(mission, user, done = false) {
