@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.36';
+const EMMA_APP_VERSION = '0.5.37';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1539,10 +1539,10 @@ function renderChatScreen(char, chat) {
   if (newChatButton) newChatButton.classList.toggle('hidden', controllerView || !isPremiumActive());
   if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
-  const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !getHideCharacterImages() && !!char.image;
+  const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !!char.image;
   const backgroundImage = controllerView
     ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
-    : (showSensitiveBackdrop ? char.image : '');
+    : (char.image && (!char.isPhotosensitive || !getHideCharacterImages()) ? char.image : '');
   if (chatScreen) {
     chatScreen.classList.toggle('photosensitive-chat', showSensitiveBackdrop);
     chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
