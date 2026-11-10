@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.22';
+const EMMA_APP_VERSION = '0.5.23';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -264,7 +264,7 @@ async function loadEmmaBackendState() {
   const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
   // Carrega os personagens da conta antes das conversas recebidas.
-  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original'});
+  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original,author_name,owner_name'});
   const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
   const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
   const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
@@ -298,7 +298,7 @@ async function loadEmmaBackendState() {
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', lore:c.lore || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
-    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online, botCategory:c.bot_category === 'official' ? 'official' : 'secondary', isOriginal:!!c.is_original
+    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online, botCategory:c.bot_category === 'official' ? 'official' : 'secondary', isOriginal:!!c.is_original, authorName:c.author_name || '', ownerName:c.owner_name || ''
   }));
   const chats = chatsRows.map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, characterIds:Array.isArray(c.character_ids)&&c.character_ids.length?c.character_ids:[c.character_id], lastMessage:c.last_message || '',
@@ -1334,7 +1334,7 @@ function renderCharGrid(container, chars) {
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
-          <div class="char-name">${escapeHtml(c.name)} ${c.isOriginal ? '<span class="chip chip-gold">Principal · Original</span>' : c.botCategory === 'official' ? '<span class="chip">Oficial</span>' : ''} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
+          <div class="char-name">${escapeHtml(c.name)} ${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : c.botCategory === 'official' ? '<span class="chip chip-verified">✓ Oficial verificado</span>' : '<span class="chip chip-verified">✓ Secundário verificado</span>'} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
           <div class="char-role">${escapeHtml(c.role)}</div>
         </div>
       </div>
@@ -2211,6 +2211,31 @@ async function adminSetBotCategory(characterId, category) {
   } catch(e) { toast(e.message||'Não foi possível alterar a categoria.', 'error'); }
 }
 
+async function adminEditCharacterCredits(characterId) {
+  if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode definir autor e dono.', 'error');
+  const character=DB.get('characters',[]).find(c=>c.id===characterId);
+  if(!character)return toast('Personagem não encontrado.','error');
+  const overlay=document.createElement('div');overlay.className='modal-overlay';
+  const modal=document.createElement('div');modal.className='modal';modal.style.maxWidth='440px';
+  modal.innerHTML='<div class="modal-header"><h3>✍️ Autor e dono</h3><button class="modal-close">×</button></div><p>Somente o Admin principal pode definir estas informações públicas.</p><label class="field"><span>Autor do personagem</span><input class="input" id="character-author-name" maxlength="120" placeholder="Nome do autor"></label><label class="field"><span>Dono do personagem</span><input class="input" id="character-owner-name" maxlength="120" placeholder="Nome do dono"></label><div class="modal-actions"><button class="btn btn-secondary" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>Salvar</button></div>';
+  overlay.append(modal);document.body.append(overlay);
+  modal.querySelector('#character-author-name').value=character.authorName||'';
+  modal.querySelector('#character-owner-name').value=character.ownerName||'';
+  modal.querySelector('.modal-close').onclick=()=>overlay.remove();
+  modal.querySelector('[data-cancel]').onclick=()=>overlay.remove();
+  modal.querySelector('[data-save]').onclick=async()=>{
+    const authorName=modal.querySelector('#character-author-name').value.trim();
+    const ownerName=modal.querySelector('#character-owner-name').value.trim();
+    try{
+      await emmaApi('admin_set_character_credits',{characterId,authorName,ownerName});
+      character.authorName=authorName;character.ownerName=ownerName;
+      DB.set('characters',DB.get('characters',[]));
+      overlay.remove();renderAdminPanel();_renderCharsContent(state.currentUser?.chatPreference||'both');
+      toast('Autor e dono atualizados.','success');
+    }catch(e){toast(e.message||'Não foi possível salvar autor e dono.','error');}
+  };
+}
+
 async function adminChangeCharacterOwner(characterId) {
   if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode trocar o controlador.', 'error');
   const users=DB.get('users',[]);
@@ -2647,7 +2672,7 @@ function renderAdminPanel() {
             <div class="admin-row-name">${escapeHtml(c.name)}</div>
             <div class="admin-row-sub">${c.isBanned ? '🚫 Banido' : (c.isOnline ? '🟢 Online' : '⚫ Offline')}</div>
             <div class="admin-row-sub">${c.isPhotosensitive ? '☀️ Fotossensibilidade ativada' : 'Fotossensibilidade desativada'}</div>
-            <div class="admin-row-sub">Controlador: ${escapeHtml(users.find(u=>u.id===c.ownerUserId)?.username || 'Nenhum')}</div>
+            <div class="admin-row-sub">Controlador: ${escapeHtml(users.find(u=>u.id===c.ownerUserId)?.username || 'Nenhum')}</div><div class="admin-row-sub">Autor: ${escapeHtml(c.authorName||'Não definido')} · Dono: ${escapeHtml(c.ownerName||'Não definido')}</div>
           </div>
           <div class="admin-actions">
             ${canEditCharacter(c) ? `<button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>
@@ -2661,7 +2686,7 @@ function renderAdminPanel() {
             }
             ${state.currentUser?.isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="adminChangeCharacterOwner('${c.id}')">👤 Trocar usuário</button>
             <select class="input" style="max-width:150px" aria-label="Categoria do bot" onchange="adminSetBotCategory('${c.id}',this.value)" ${c.isOriginal ? 'disabled title="Emma é a personagem principal original"' : ''}><option value="official" ${c.botCategory==='official'?'selected':''}>Bot oficial</option><option value="secondary" ${c.botCategory!=='official'?'selected':''}>Bot secundário</option></select>
-            ${c.isOriginal ? '<span class="chip chip-gold">Principal · Original</span>' : ''}` : ''}
+            ${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : ''}<button class="btn btn-sm btn-secondary" onclick="adminEditCharacterCredits('${c.id}')">✍️ Autor e dono</button>` : ''}
             ${canEditCharacter(c) ? `<button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>` : ''}
             <button class="btn btn-sm btn-danger" onclick="showAdminDeleteCharacterModal('${c.id}')" title="Excluir personagem">🗑️</button>
           </div>
