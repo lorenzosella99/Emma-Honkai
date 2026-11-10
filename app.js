@@ -1252,7 +1252,7 @@ function _renderCharsContent(pref) {
   let bots = chars.filter(c => !c.isBanned && !c.ownerUserId && (category==="vip"?c.isVip:!c.isVip));
   if (pref === 'female') bots = bots.filter(c => c.gender === 'female');
   else if (pref === 'male') bots = bots.filter(c => c.gender === 'male');
-  const officialBots = bots.filter(c => c.botCategory === 'official');
+  const officialBots = bots.filter(c => c.botCategory === 'official').sort((a,b)=>Number(!!b.isOriginal)-Number(!!a.isOriginal));
   const secondaryBots = bots.filter(c => c.botCategory !== 'official');
 
   // Players who registered as "character" type
