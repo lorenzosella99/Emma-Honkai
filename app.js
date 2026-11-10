@@ -2197,6 +2197,13 @@ async function adminRejectCharacterRequest(userId) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+async function adminChangeCharacterOwner(characterId) {
+  if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode trocar o controlador.', 'error');
+  const users=DB.get('users',[]);const options=users.map(u=>u.username+' ['+u.id+']').join('\n');
+  const selected=prompt('Digite o ID do usuário que controlará o personagem. Deixe vazio para remover o controlador.\n\n'+options,'');if(selected===null)return;
+  try{await emmaApi('admin_set_character_owner',{characterId,userId:selected.trim()||null});await loadEmmaBackendState();renderAdminPanel();toast('Controlador atualizado.','success');}catch(e){toast(e.message||'Não foi possível trocar o controlador.','error');}
+}
+
 async function adminAssignCharacter(userId) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const characterId = el('assign-char-' + userId)?.value;
@@ -2619,6 +2626,7 @@ function renderAdminPanel() {
             <div class="admin-row-name">${escapeHtml(c.name)}</div>
             <div class="admin-row-sub">${c.isBanned ? '🚫 Banido' : (c.isOnline ? '🟢 Online' : '⚫ Offline')}</div>
             <div class="admin-row-sub">${c.isPhotosensitive ? '☀️ Fotossensibilidade ativada' : 'Fotossensibilidade desativada'}</div>
+            <div class="admin-row-sub">Controlador: ${escapeHtml(users.find(u=>u.id===c.ownerUserId)?.username || 'Nenhum')}</div>
           </div>
           <div class="admin-actions">
             ${canEditCharacter(c) ? `<button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>
@@ -2630,6 +2638,7 @@ function renderAdminPanel() {
               ? `<button class="btn btn-sm btn-secondary" onclick="unbanChar('${c.id}')">Desbanir</button>`
               : `<button class="btn btn-sm btn-danger" onclick="showBanCharModal('${c.id}')">Banir</button>`
             }
+            ${state.currentUser?.isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="adminChangeCharacterOwner('${c.id}')">👤 Trocar usuário</button>` : ''}
             ${canEditCharacter(c) ? `<button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>` : ''}
             <button class="btn btn-sm btn-danger" onclick="showAdminDeleteCharacterModal('${c.id}')" title="Excluir personagem">🗑️</button>
           </div>
