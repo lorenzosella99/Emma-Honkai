@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.34';
+const EMMA_APP_VERSION = '0.5.35';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1155,6 +1155,7 @@ function switchTab(tab) {
   if (tab === 'chars') renderCharsTab(content);
   else if (tab === 'profile') renderProfileTab(content);
   else if (tab === 'missions') renderMissionsTab(content);
+  else if (tab === 'challenges') renderDailyChallengesTab(content);
   else if (tab === 'store') renderStoreTab(content);
 
   updateNavBadges();
@@ -2291,6 +2292,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.35',title:'Desafios diários com recompensa narrativa',items:['Nova aba de desafios com histórias de roleplay que mudam diariamente.','Recompensa de 500.000 moedas por dia, validada pelo servidor após pelo menos 5 mensagens do usuário e 5 respostas da personagem.']},
     {version:'0.5.34',title:'Proteção visual reforçada para fotossensibilidade',items:['Imagens de personagens marcados com fotossensibilidade agora recebem desfoque mais forte e distorção visual adicional.','Avatares desses personagens no chat também ficam mais desfocados.']},
     {version:'0.5.33',title:'Ferramentas e contato nos chats',items:['Copiar mensagens e responder citando uma mensagem anterior.','Horário completo disponível ao tocar ou passar sobre o horário da mensagem.','Banners “Sua propaganda aqui” nos dois cantos do chat; ambos abrem o contato do Admin e permitem copiar o usuário @lorenzov10.','Indicador de digitação e avisos de mensagens não lidas continuam disponíveis.']},
     {version:'0.5.32',title:'Filtros do diretório de personagens',items:['Novo filtro “Só jogadores” para ocultar bots e listar apenas criadores.','O filtro VIP fica disponível somente para assinantes Premium.']},
@@ -2511,6 +2513,78 @@ function renderOpenChats(container, chats) {
       </div>
     `;
   }).join('');
+}
+
+// ─── DESAFIOS DIÁRIOS ─────────────────────────────────────────────────────────
+let dailyChallengeData = null;
+async function renderDailyChallengesTab(container) {
+  container.innerHTML = '<div class="app-header"><div class="header-title">💞 Desafios diários</div><div class="header-coins">🪙 <span class="coins-display">'+Number(state.currentUser?.coins||0).toLocaleString('pt-BR')+'</span></div></div><div class="daily-challenge-loading">Carregando desafio de hoje…</div>';
+  try {
+    const result = await emmaApi('get_daily_challenge');
+    dailyChallengeData = result;
+    const user = state.currentUser;
+    const chats = DB.get('chats',[]).filter(c=>c.userId===user.id);
+    const chars = DB.get('characters',[]);
+    const choices = [];
+    chats.forEach(chat=>{
+      const ids=Array.isArray(chat.characterIds)&&chat.characterIds.length?chat.characterIds:[chat.charId];
+      ids.forEach(id=>{
+        const character=chars.find(ch=>ch.id===id);
+        if(character&&!character.isBanned) choices.push({chatId:chat.id,characterId:id,label:character.name+' — '+(chat.lastMessage||'Conversa')});
+      });
+    });
+    const uniqueChoices=choices.filter((item,index,array)=>array.findIndex(x=>x.chatId===item.chatId&&x.characterId===item.characterId)===index);
+    const options=uniqueChoices.map(item=>'<option value="'+escapeHtml(item.chatId)+'|'+escapeHtml(item.characterId)+'">'+escapeHtml(item.label.slice(0,90))+'</option>').join('');
+    const claimed=result.claimed;
+    container.innerHTML=`
+      <div class="app-header"><div class="header-title">💞 Desafios diários</div><div class="header-coins">🪙 <span class="coins-display">${Number(user.coins||0).toLocaleString('pt-BR')}</span></div></div>
+      <div class="daily-challenge-wrap">
+        <div class="daily-challenge-hero">
+          <div class="daily-challenge-kicker">DESAFIO DE HOJE · ${escapeHtml(result.date.split('-').reverse().join('/'))}</div>
+          <div class="daily-challenge-icon">${escapeHtml(result.challenge.icon)}</div>
+          <h2>${escapeHtml(result.challenge.title)}</h2>
+          <p>${escapeHtml(result.challenge.description)}</p>
+          <div class="daily-challenge-reward">🪙 500.000 moedas</div>
+        </div>
+        <div class="daily-challenge-card">
+          <h3>Como concluir</h3>
+          <p>Faça o roleplay nesta conversa e desenvolva a história com a personagem. O sistema verifica se hoje houve pelo menos <strong>5 mensagens suas e 5 respostas dela</strong> na mesma conversa.</p>
+          ${claimed?`<div class="daily-challenge-complete">✅ Desafio resgatado! +500.000 moedas${result.claim?.claimedAt?' · '+new Date(result.claim.claimedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):''}</div>`:`
+            ${uniqueChoices.length?`<label class="daily-challenge-label" for="daily-challenge-chat">Escolha a conversa</label><select id="daily-challenge-chat" class="input daily-challenge-select">${options}</select>
+            <div class="daily-challenge-actions"><button class="btn btn-secondary" onclick="openDailyChallengeChat()">Continuar história</button><button class="btn btn-primary" onclick="claimDailyChallenge(this)">Resgatar 500.000</button></div>`:'<p class="daily-challenge-empty">Você ainda não tem uma conversa disponível. Abra um personagem e comece a história para participar.</p>'}
+          `}
+          <div class="daily-challenge-footnote">Uma recompensa por conta a cada dia. O desafio renova à meia-noite (horário de Brasília).</div>
+        </div>
+      </div>`;
+  } catch(error) {
+    container.innerHTML='<div class="app-header"><div class="header-title">💞 Desafios diários</div></div><div class="daily-challenge-card">Não foi possível carregar o desafio. '+escapeHtml(error.message||'Tente novamente.')+' <button class="btn btn-secondary" onclick="switchTab(\'challenges\')">Tentar novamente</button></div>';
+  }
+}
+function getDailyChallengeSelection() {
+  const value=el('daily-challenge-chat')?.value||'';
+  const [chatId,characterId]=value.split('|');
+  return {chatId,characterId};
+}
+function openDailyChallengeChat() {
+  const {chatId,characterId}=getDailyChallengeSelection();
+  if(!chatId||!characterId)return toast('Escolha uma conversa primeiro.','error');
+  openChat(characterId,chatId);
+}
+async function claimDailyChallenge(button) {
+  const {chatId,characterId}=getDailyChallengeSelection();
+  if(!chatId||!characterId)return toast('Escolha uma conversa primeiro.','error');
+  button.disabled=true;button.textContent='Verificando…';
+  try {
+    const result=await emmaApi('claim_daily_challenge',{chatId,characterId});
+    await loadEmmaBackendState();
+    const rect=button.getBoundingClientRect();
+    coinFly(result.reward,rect.left,rect.top);
+    toast('+500.000 moedas — desafio diário concluído!','gold',4500);
+    updateCoinsDisplay();switchTab('challenges');updateNavBadges();
+  } catch(error) {
+    toast(error.message||'Não foi possível concluir o desafio.','error');
+    button.disabled=false;button.textContent='Resgatar 500.000';
+  }
 }
 
 // ─── MISSIONS TAB ─────────────────────────────────────────────────────────────
