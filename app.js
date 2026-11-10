@@ -1500,6 +1500,7 @@ async function resetCurrentChat() {
 }
 
 function renderChatScreen(char, chat) {
+  cancelChatReply();
   const statusText = char.isOnline ? 'Online' : 'Offline · Bot respondendo';
   const statusClass = char.isOnline ? '' : 'bot-active';
   const statusDot = char.isOnline ? '🟢' : '🤖';
