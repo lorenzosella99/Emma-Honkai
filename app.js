@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.41';
+const EMMA_APP_VERSION = '0.5.42';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1479,6 +1479,30 @@ async function manageChatBots() {
 }
 async function saveChatBots(){const modal=el('chat-bots-modal'),chat=DB.get('chats',[]).find(c=>c.id===state.currentChat?.chatId);if(!modal||!chat)return;const ids=[chat.charId,...Array.from(modal.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value)];if(ids.length>6)return toast('O limite é de 6 personagens por chat.','error');try{await emmaApi('set_chat_character_ids',{chatId:chat.id,characterIds:[...new Set(ids)]});chat.characterIds=[...new Set(ids)];DB.set('chats',DB.get('chats',[]));modal.remove();toast('Bots adicionados ao chat.','success');}catch(e){toast(e.message||'Não foi possível salvar os bots.','error');}}
 
+async function resetAllMyChatHistory(button) {
+  const user=state.currentUser;
+  if(!user||user.userType==='character')return;
+  const chats=DB.get('chats',[]).filter(chat=>chat.userId===user.id);
+  if(!chats.length)return toast('Você ainda não tem conversas para limpar.','info');
+  if(!confirm('Apagar todas as mensagens de '+chats.length+' conversa(s)? Os chats continuarão na lista, mas ficarão vazios. Esta ação não pode ser desfeita.'))return;
+  if(button){button.disabled=true;button.textContent='Apagando histórico...';}
+  try{
+    await emmaApi('reset_all_my_chat_history');
+    const messages=DB.get('messages',{});
+    chats.forEach(chat=>{messages[chat.id]=[];});
+    DB.set('messages',messages);
+    const allChats=DB.get('chats',[]);
+    allChats.forEach(chat=>{if(chat.userId===user.id){chat.lastMessage='';chat.lastTime=Date.now();chat.unread=0;}});
+    DB.set('chats',allChats);
+    if(chats.some(chat=>chat.id===state.currentChat?.chatId))renderMessages([]);
+    toast('Histórico de todas as conversas apagado.','success');
+    switchTab('profile');
+  }catch(e){
+    toast(e.message||'Não foi possível apagar o histórico.','error');
+    if(button){button.disabled=false;button.textContent='Apagar histórico de todos os chats';}
+  }
+}
+
 async function resetCurrentChat() {
   const chatId = state.currentChat?.chatId;
   if (!chatId || state.currentChat?.char?.ownerUserId === state.currentUser?.id) return;
@@ -2116,6 +2140,13 @@ function renderProfileTab(container) {
         </div>
       </div>
 
+      ${user.userType !== 'character' ? `
+      <div class="admin-section" style="margin:14px 16px;padding:16px">
+        <b>🗑️ Histórico das conversas</b>
+        <div class="admin-row-sub" style="margin:8px 0">Apaga as mensagens de todas as suas conversas. Os chats continuam na lista, mas ficam vazios. Esta ação não pode ser desfeita.</div>
+        <button class="btn btn-danger btn-full" onclick="resetAllMyChatHistory(this)">Apagar histórico de todos os chats</button>
+      </div>
+      ` : ''}
       <div class="admin-section" style="margin:14px 16px;padding:16px">
         <b>🌟 Área de personagem</b>
         ${myCharacters.length ? `<div class="admin-row-sub" style="margin:8px 0">Você controla ${myCharacters.length} personagem(ns).</div>
@@ -2296,6 +2327,12 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.42',title:'Apagar histórico das conversas pelo Perfil',items:['Nova opção para apagar as mensagens de todos os chats da conta de jogador de uma só vez.','As conversas permanecem na lista, mas ficam vazias; a opção não aparece em contas do tipo personagem.','O histórico de atualizações e as estatísticas da conta são preservados.']},
+    {version:'0.5.41',title:'Anúncios fora do painel de conversa',items:['Os espaços de propaganda passaram a ser inseridos fora do painel do chat, para usar as áreas livres da tela.']},
+    {version:'0.5.40',title:'Reposicionamento das propagandas',items:['Ajuste inicial da posição dos espaços de propaganda sem alterar as dimensões do painel do chat.']},
+    {version:'0.5.39',title:'Ajuste dos espaços de propaganda',items:['Reposicionamento dos anúncios no layout do chat.']},
+    {version:'0.5.38',title:'Correção da fotossensibilidade no chat',items:['Ao reexibir a imagem do personagem, o filtro de fotossensibilidade do fundo e dos avatares também é removido.']},
+    {version:'0.5.37',title:'Fundo de chat desfocado e fotossensibilidade',items:['Imagem de fundo do chat com desfoque.','Proteção visual reforçada no fundo quando a fotossensibilidade está ativada.']},
     {version:'0.5.36',title:'Desafios diários dentro de Missões',items:['O desafio narrativo diário agora aparece diretamente na aba Missões, acima das missões comuns.','A recompensa de 500.000 moedas continua validada pelo servidor e pode ser resgatada uma vez por dia.']},
     {version:'0.5.35',title:'Desafios diários com recompensa narrativa',items:['Nova aba de desafios com histórias de roleplay que mudam diariamente.','Recompensa de 500.000 moedas por dia, validada pelo servidor após pelo menos 5 mensagens do usuário e 5 respostas da personagem.']},
     {version:'0.5.34',title:'Proteção visual reforçada para fotossensibilidade',items:['Imagens de personagens marcados com fotossensibilidade agora recebem desfoque mais forte e distorção visual adicional.','Avatares desses personagens no chat também ficam mais desfocados.']},
