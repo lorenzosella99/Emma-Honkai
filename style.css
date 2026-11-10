@@ -1276,3 +1276,8 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 
 /* Selo visual dos personagens oficiais e secundários verificados */
 .chip-verified{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(59,130,246,.38);background:rgba(37,99,235,.13);color:#93c5fd;font-weight:700;}
+
+
+/* Filtros do diretório de bots em tamanho compacto */
+.bot-directory-filters .chip-select{padding:4px 9px;font-size:.70rem;line-height:1.2;min-height:27px;font-weight:600;}
+.bot-directory-filters .chip-group{gap:5px;}
