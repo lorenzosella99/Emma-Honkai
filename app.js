@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.33';
+const EMMA_APP_VERSION = '0.5.34';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2291,6 +2291,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.34',title:'Proteção visual reforçada para fotossensibilidade',items:['Imagens de personagens marcados com fotossensibilidade agora recebem desfoque mais forte e distorção visual adicional.','Avatares desses personagens no chat também ficam mais desfocados.']},
     {version:'0.5.33',title:'Ferramentas e contato nos chats',items:['Copiar mensagens e responder citando uma mensagem anterior.','Horário completo disponível ao tocar ou passar sobre o horário da mensagem.','Banners “Sua propaganda aqui” nos dois cantos do chat; ambos abrem o contato do Admin e permitem copiar o usuário @lorenzov10.','Indicador de digitação e avisos de mensagens não lidas continuam disponíveis.']},
     {version:'0.5.32',title:'Filtros do diretório de personagens',items:['Novo filtro “Só jogadores” para ocultar bots e listar apenas criadores.','O filtro VIP fica disponível somente para assinantes Premium.']},
     {version:'0.5.31',title:'Idades mínimas e idade confirmada pelo Admin',items:['O Admin principal define a idade exata confirmada para cada conta: mínimo de 18 anos.','O Admin principal verifica a idade cadastrada de cada personagem: mínimo de 19 anos.','A elegibilidade continua exigindo conta verificada, personagem VIP e personagem verificado.']},
