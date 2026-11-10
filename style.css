@@ -502,6 +502,7 @@ body.chat-open .bottom-nav { display: none !important; }
 
 /* ========= CHAT SCREEN ========= */
 #screen-chat {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--bg-0);
