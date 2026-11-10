@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.27';
+const EMMA_APP_VERSION = '0.5.28';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2209,6 +2209,34 @@ async function adminSetBotCategory(characterId, category) {
     toast(category==='official'?'Bot movido para oficiais.':'Bot movido para secundários.','success');
     renderAdminPanel();
   } catch(e) { toast(e.message||'Não foi possível alterar a categoria.', 'error'); }
+}
+
+function showAppUpdateLog() {
+  const entries = [
+    {version:'0.5.28',title:'Histórico de atualizações',items:['A versão agora é clicável e abre este registro de alterações.']},
+    {version:'0.5.27',title:'Respostas coerentes com o histórico',items:['O bot verifica se a resposta mantém continuidade com a conversa.','Quando detecta uma incoerência clara, tenta gerar uma resposta corrigida usando o contexto recente.']},
+    {version:'0.5.26',title:'Painel de personagens',items:['Ações administrativas dos personagens reunidas no botão de edição.','Acesso rápido à fotossensibilidade e aos dados de autor e dono.']},
+    {version:'0.5.25',title:'Filtros de personagens',items:['Ajustes visuais nos botões de filtro dos bots.']},
+    {version:'0.5.23',title:'Bots oficiais e secundários',items:['Separação dos personagens oficiais e secundários.','Identificação de personagem principal/original e campos de autor e dono.']},
+    {version:'0.5.20',title:'Múltiplos personagens e conversas',items:['Suporte para controlar vários personagens e organizar conversas por personagem.']},
+    {version:'0.5.16',title:'Permissões de vice-admin',items:['Permissões administrativas mais específicas para vice-admins.']}
+  ];
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay';
+  overlay.innerHTML=`
+    <div class="modal-sheet app-update-log" role="dialog" aria-modal="true" aria-labelledby="app-update-log-title">
+      <div class="modal-handle"></div>
+      <div class="modal-title" id="app-update-log-title">📋 Histórico de atualizações</div>
+      <div class="app-update-log-current">Versão atual: <strong>${EMMA_APP_VERSION}</strong></div>
+      <div class="app-update-log-list">${entries.map(entry=>`
+        <section class="app-update-entry">
+          <div class="app-update-entry-head"><strong>Versão ${entry.version}</strong><span>${entry.title}</span></div>
+          <ul>${entry.items.map(item=>'<li>'+item+'</li>').join('')}</ul>
+        </section>`).join('')}</div>
+      <div class="modal-actions"><button class="btn btn-primary btn-full" data-close-update-log>Fechar</button></div>
+    </div>`;
+  overlay.addEventListener('click',event=>{if(event.target===overlay||event.target.closest('[data-close-update-log]'))overlay.remove();});
+  document.body.appendChild(overlay);
 }
 
 function showAdminCharacterActionsModal(characterId) {
