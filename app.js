@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.42';
+const EMMA_APP_VERSION = '0.5.43';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2327,6 +2327,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.43',title:'Missões de reações emocionais',items:['Os desafios diários agora pedem reações específicas: paixão, compaixão, raiva, confiança, diversão, ciúmes ou admiração.','A conclusão é avaliada no servidor, verificando se a própria personagem demonstrou a reação no roleplay.','Continuam necessárias pelo menos 5 mensagens do jogador e 5 respostas da personagem no dia.']},
     {version:'0.5.42',title:'Apagar histórico das conversas pelo Perfil',items:['Nova opção para apagar as mensagens de todos os chats da conta de jogador de uma só vez.','As conversas permanecem na lista, mas ficam vazias; a opção não aparece em contas do tipo personagem.','O histórico de atualizações e as estatísticas da conta são preservados.']},
     {version:'0.5.41',title:'Anúncios fora do painel de conversa',items:['Os espaços de propaganda passaram a ser inseridos fora do painel do chat, para usar as áreas livres da tela.']},
     {version:'0.5.40',title:'Reposicionamento das propagandas',items:['Ajuste inicial da posição dos espaços de propaganda sem alterar as dimensões do painel do chat.']},
@@ -2590,7 +2591,7 @@ async function renderDailyChallengesTab(container, embedded = false) {
         </div>
         <div class="daily-challenge-card">
           <h3>Como concluir</h3>
-          <p>Faça o roleplay nesta conversa e desenvolva a história com a personagem. O sistema verifica se hoje houve pelo menos <strong>5 mensagens suas e 5 respostas dela</strong> na mesma conversa.</p>
+          <p>Seu objetivo é conseguir a reação emocional descrita acima. A recompensa só é liberada quando a própria personagem demonstrar essa reação na conversa. Também são necessárias <strong>5 mensagens suas e 5 respostas dela</strong> hoje.</p>
           ${claimed?`<div class="daily-challenge-complete">✅ Desafio resgatado! +500.000 moedas${result.claim?.claimedAt?' · '+new Date(result.claim.claimedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):''}</div>`:`
             ${uniqueChoices.length?`<label class="daily-challenge-label" for="daily-challenge-chat">Escolha a conversa</label><select id="daily-challenge-chat" class="input daily-challenge-select">${options}</select>
             <div class="daily-challenge-actions"><button class="btn btn-secondary" onclick="openDailyChallengeChat()">Continuar história</button><button class="btn btn-primary" onclick="claimDailyChallenge(this)">Resgatar 500.000</button></div>`:'<p class="daily-challenge-empty">Você ainda não tem uma conversa disponível. Abra um personagem e comece a história para participar.</p>'}
