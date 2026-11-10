@@ -1279,5 +1279,6 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 
 
 /* Filtros do diretório de bots em tamanho compacto */
-.bot-directory-filters .chip-select{padding:4px 9px;font-size:.70rem;line-height:1.2;min-height:27px;font-weight:600;}
-.bot-directory-filters .chip-group{gap:5px;}
+.bot-directory-filters .chip-select{padding:3px 8px !important;font-size:10px !important;line-height:1 !important;min-height:23px !important;height:23px !important;font-weight:600 !important;max-width:max-content !important;}
+.bot-directory-filters .chip-group{gap:4px !important;}
+.bot-directory-filters button.chip-select{flex:0 0 auto !important;}
