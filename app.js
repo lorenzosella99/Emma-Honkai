@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.32';
+const EMMA_APP_VERSION = '0.5.33';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1524,6 +1524,11 @@ function renderChatScreen(char, chat) {
     headerInfo.appendChild(revealButton);
   }
   const chatScreen = el('screen-chat');
+  if (chatScreen && !el('chat-ad-left')) {
+    const ads = document.createElement('div'); ads.className = 'chat-ad-corners';
+    ads.innerHTML = '<button id="chat-ad-left" class="chat-ad-slot" onclick="showAdminContactModal()" aria-label="Sua propaganda aqui. Fale com o admin"><span class="chat-ad-art" aria-hidden="true">📢</span><span>Sua propaganda aqui</span><small>Fale com o admin</small></button><button id="chat-ad-right" class="chat-ad-slot" onclick="showAdminContactModal()" aria-label="Sua propaganda aqui. Fale com o admin"><span class="chat-ad-art" aria-hidden="true">✨</span><span>Sua propaganda aqui</span><small>Fale com o admin</small></button>';
+    chatScreen.append(ads);
+  }
   const controllerView = char.ownerUserId === state.currentUser?.id;
   const newChatButton = el('chat-new-btn');
   const resetChatButton = el('chat-reset-btn');
@@ -1596,37 +1601,83 @@ function renderMessage(msg) {
   const viewingAsController = state.currentChat?.char?.ownerUserId === state.currentUser.id;
   const isUser = msg.senderId === (viewingAsController ? state.currentChat.userId : state.currentUser.id);
   const avatarSrc = isUser ? '' : safeImageUrl(DB.get('characters', []).find(c => c.id === msg.senderId)?.image || '');
-
   const avatarHtml = !isUser ? `
-    <div class="msg-avatar">
-      <img src="${avatarSrc}" alt="" onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;32&quot; height=&quot;32&quot; viewBox=&quot;0 0 32 32&quot;><rect width=&quot;32&quot; height=&quot;32&quot; fill=&quot;%231f2133&quot; rx=&quot;16&quot;/><text x=&quot;50%&quot; y=&quot;50%&quot; text-anchor=&quot;middle&quot; dominant-baseline=&quot;middle&quot; font-size=&quot;14&quot;>👤</text></svg>'">
-    </div>
+    <div class="msg-avatar"><img src="${avatarSrc}" alt="" onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;32&quot; height=&quot;32&quot; viewBox=&quot;0 0 32 32&quot;><rect width=&quot;32&quot; height=&quot;32&quot; fill=&quot;%231f2133&quot; rx=&quot;16&quot;/><text x=&quot;50%&quot; y=&quot;50%&quot; text-anchor=&quot;middle&quot; dominant-baseline=&quot;middle&quot; font-size=&quot;14&quot;>👤</text></svg>'"></div>
   ` : '';
-
   let bubbleClass = isUser ? 'user-msg' : 'char';
   let costHtml = '';
-
-  if (msg.type === 'thought') {
-    bubbleClass = 'thought';
-    costHtml = msg.cost ? `<div class="msg-cost">🪙 ${msg.cost}</div>` : '';
-  } else if (msg.type === 'action') {
-    bubbleClass = 'action';
-  }
-
+  if (msg.type === 'thought') { bubbleClass = 'thought'; costHtml = msg.cost ? `<div class="msg-cost">🪙 ${msg.cost}</div>` : ''; }
+  else if (msg.type === 'action') bubbleClass = 'action';
+  const stamp = Number(msg.timestamp || 0);
+  const exactTime = stamp ? new Date(stamp).toLocaleString('pt-BR') : '';
+  const safeId = String(msg.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const replyHtml = msg.replyPreview ? `<div class="msg-reply-quote">${escapeHtml(msg.replyPreview)}</div>` : '';
   return `
-    <div class="msg-row ${isUser ? 'user' : ''}">
+    <div class="msg-row ${isUser ? 'user' : ''}" data-message-id="${safeId}">
       ${avatarHtml}
       <div class="msg-bubble-wrap">
-        <div class="msg-bubble ${bubbleClass}">${formatMessageContent(msg)}</div>
-        <div class="flex gap-2 items-center">
-          <div class="msg-time">${timeAgo(msg.timestamp)}</div>
+        <div class="msg-bubble ${bubbleClass}">${replyHtml}${formatMessageContent(msg)}</div>
+        <div class="msg-tools">
+          <span class="msg-time" title="${escapeHtml(exactTime)}">${timeAgo(msg.timestamp)}</span>
           ${costHtml}
+          <button class="msg-tool-btn" onclick="copyChatMessage('${safeId}')" title="Copiar mensagem" aria-label="Copiar mensagem">⧉</button>
+          <button class="msg-tool-btn" onclick="replyToChatMessage('${safeId}')" title="Responder mensagem" aria-label="Responder mensagem">↩</button>
         </div>
       </div>
     </div>
   `;
 }
 
+let activeReplyTarget = null;
+function findActiveChatMessage(messageId) {
+  const list = DB.get('messages', {})[state.currentChat?.chatId] || [];
+  return list.find(m => String(m.id).replace(/[^a-zA-Z0-9_-]/g, '') === String(messageId));
+}
+async function copyChatMessage(messageId) {
+  const msg = findActiveChatMessage(messageId);
+  if (!msg) return toast('Mensagem não encontrada.', 'error');
+  const text = String(msg.text || '');
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else {
+      const field = document.createElement('textarea'); field.value = text;
+      field.style.position = 'fixed'; field.style.opacity = '0'; document.body.append(field);
+      field.select(); document.execCommand('copy'); field.remove();
+    }
+    toast('Mensagem copiada.', 'success');
+  } catch { toast('Não foi possível copiar a mensagem neste navegador.', 'error'); }
+}
+function replyToChatMessage(messageId) {
+  const msg = findActiveChatMessage(messageId);
+  if (!msg) return toast('Mensagem não encontrada.', 'error');
+  const author = msg.senderId === state.currentUser?.id ? 'Você' : (state.currentChat?.char?.name || 'Personagem');
+  activeReplyTarget = { text:String(msg.text || '').slice(0,180), author };
+  let bar = el('chat-reply-preview');
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'chat-reply-preview'; bar.className = 'chat-reply-preview';
+    el('chat-input-bar')?.before(bar);
+  }
+  bar.innerHTML = '<span>Respondendo a <strong>' + escapeHtml(author) + '</strong>: ' + escapeHtml(activeReplyTarget.text) + '</span><button type="button" aria-label="Cancelar resposta" onclick="cancelChatReply()">×</button>';
+  el('chat-input')?.focus();
+}
+function cancelChatReply() {
+  activeReplyTarget = null;
+  el('chat-reply-preview')?.remove();
+}
+function showAdminContactModal() {
+  const overlay = document.createElement('div'); overlay.className = 'modal-overlay'; overlay.id = 'admin-contact-modal';
+  const modal = document.createElement('div'); modal.className = 'modal'; modal.style.maxWidth = '380px';
+  modal.innerHTML = '<div class="modal-header"><h3>📣 Fale com o admin</h3><button class="modal-close" aria-label="Fechar">×</button></div><p class="admin-row-sub">Entre em contato com o administrador pelo usuário abaixo:</p><div class="admin-contact-handle">@lorenzov10</div><div class="modal-actions"><button class="btn btn-secondary" data-close>Fechar</button><button class="btn btn-primary" data-copy>Copiar usuário</button></div>';
+  overlay.append(modal); document.body.append(overlay);
+  const close = () => overlay.remove();
+  modal.querySelector('.modal-close').onclick = close; modal.querySelector('[data-close]').onclick = close;
+  modal.querySelector('[data-copy]').onclick = async () => {
+    try { await navigator.clipboard.writeText('@lorenzov10'); toast('Usuário do admin copiado.', 'success'); }
+    catch { toast('Usuário do admin: @lorenzov10', 'info', 5000); }
+    close();
+  };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
 function formatMessageContent(msg) {
   const raw = String(msg?.text ?? '');
   const type = msg?.type || msg?.message_type || 'speech';
@@ -1681,12 +1732,14 @@ async function sendMessage() {
   const messageText = parsed.text;
   const type = parsed.type;
   if (!messageText) return toast('Digite o conteúdo da mensagem dentro dos delimitadores.', 'error');
+  const replyTarget = activeReplyTarget;
+  const outgoingText = replyTarget ? '↪ Respondendo a ' + replyTarget.author + ': "' + replyTarget.text + '"\\n\\n' + messageText : messageText;
 
   // Se quem está digitando é o controlador do personagem, a mensagem sai como personagem.
   if (state.currentChat?.char?.ownerUserId === state.currentUser.id) {
     const chatId = state.currentChat.chatId;
-    input.value = ''; input.style.height = 'auto';
-    const characterMsg = { id:'m_'+Date.now(), senderId:state.currentChat.charId, chatId, type, text:messageText, timestamp:Date.now(), isCharacterController:true };
+    input.value = ''; input.style.height = 'auto'; cancelChatReply();
+    const characterMsg = { id:'m_'+Date.now(), senderId:state.currentChat.charId, chatId, type, text:outgoingText, replyPreview:replyTarget ? replyTarget.author + ': ' + replyTarget.text : '', timestamp:Date.now(), isCharacterController:true };
     try {
       await addMessage(characterMsg);
       await refreshEmmaBackendState();
@@ -1709,6 +1762,7 @@ async function sendMessage() {
 
   input.value = '';
   input.style.height = 'auto';
+  cancelChatReply();
 
   // Add user message
   const userMsg = {
@@ -1716,7 +1770,8 @@ async function sendMessage() {
     senderId: state.currentUser.id,
     chatId: state.currentChat.chatId,
     type,
-    text: messageText,
+    text: outgoingText,
+    replyPreview: replyTarget ? replyTarget.author + ': ' + replyTarget.text : '',
     timestamp: Date.now(),
     cost
   };
