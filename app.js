@@ -2199,11 +2199,18 @@ async function adminRejectCharacterRequest(userId) {
 
 async function adminChangeCharacterOwner(characterId) {
   if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode trocar o controlador.', 'error');
-  const users=DB.get('users',[]);const options=users.map(u=>u.username+' ['+u.id+']').join('\n');
-  const selected=prompt('Digite o ID do usuário que controlará o personagem. Deixe vazio para remover o controlador.\n\n'+options,'');if(selected===null)return;
-  try{await emmaApi('admin_set_character_owner',{characterId,userId:selected.trim()||null});await loadEmmaBackendState();renderAdminPanel();toast('Controlador atualizado.','success');}catch(e){toast(e.message||'Não foi possível trocar o controlador.','error');}
+  const users=DB.get('users',[]);
+  const current=DB.get('characters',[]).find(c=>c.id===characterId);
+  const overlay=document.createElement('div');overlay.className='modal-overlay';
+  const modal=document.createElement('div');modal.className='modal';modal.style.maxWidth='420px';
+  modal.innerHTML='<div class="modal-header"><h3>👤 Alterar controlador</h3><button class="modal-close">×</button></div><p>Escolha quem será responsável por este personagem.</p><select class="input" id="character-owner-select"><option value="">Sem controlador (bot)</option></select><div class="modal-actions"><button class="btn btn-secondary" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>Salvar</button></div>';
+  overlay.append(modal);document.body.append(overlay);
+  const select=modal.querySelector('#character-owner-select');
+  select.innerHTML+=[...users].sort((a,b)=>a.username.localeCompare(b.username)).map(u=>'<option value="'+escapeHtml(u.id)+'">'+escapeHtml(u.username)+'</option>').join('');
+  select.value=current?.ownerUserId||'';
+  modal.querySelector('.modal-close').onclick=()=>overlay.remove();modal.querySelector('[data-cancel]').onclick=()=>overlay.remove();
+  modal.querySelector('[data-save]').onclick=async()=>{try{await emmaApi('admin_set_character_owner',{characterId,userId:select.value||null});overlay.remove();await loadEmmaBackendState();renderAdminPanel();toast('Controlador atualizado.','success');}catch(e){toast(e.message||'Não foi possível trocar o controlador.','error');}};
 }
-
 async function adminAssignCharacter(userId) {
   if (!state.currentUser?.isAdmin) return toast('Acesso negado.', 'error');
   const characterId = el('assign-char-' + userId)?.value;
