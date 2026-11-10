@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.40';
+const EMMA_APP_VERSION = '0.5.41';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1533,7 +1533,7 @@ function renderChatScreen(char, chat) {
   if (chatScreen && !el('chat-ad-left')) {
     const ads = document.createElement('div'); ads.className = 'chat-ad-corners';
     ads.innerHTML = '<button id="chat-ad-left" class="chat-ad-slot" onclick="showAdminContactModal()" aria-label="Sua propaganda aqui. Fale com o admin"><span class="chat-ad-art" aria-hidden="true">📢</span><span>Sua propaganda aqui</span><small>Fale com o admin</small></button><button id="chat-ad-right" class="chat-ad-slot" onclick="showAdminContactModal()" aria-label="Sua propaganda aqui. Fale com o admin"><span class="chat-ad-art" aria-hidden="true">✨</span><span>Sua propaganda aqui</span><small>Fale com o admin</small></button>';
-    chatScreen.append(ads);
+    document.body.append(ads);
   }
   const controllerView = char.ownerUserId === state.currentUser?.id;
   const newChatButton = el('chat-new-btn');
