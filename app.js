@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.28';
+const EMMA_APP_VERSION = '0.5.29';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -264,7 +264,7 @@ async function loadEmmaBackendState() {
   const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
   // Carrega os personagens da conta antes das conversas recebidas.
-  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original,author_name,owner_name'});
+  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original,author_name,owner_name,local_context'});
   const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
   const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
   const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
@@ -296,7 +296,7 @@ async function loadEmmaBackendState() {
   const users = allProfiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', lore:c.lore || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
-    gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
+    gender:c.gender || 'other', botPersonality:c.bot_personality || '', localContext:c.local_context || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
     ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online, botCategory:c.bot_category === 'official' ? 'official' : 'secondary', isOriginal:!!c.is_original, authorName:c.author_name || '', ownerName:c.owner_name || ''
   }));
@@ -2213,6 +2213,7 @@ async function adminSetBotCategory(characterId, category) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.29',title:'Memória e contexto local dos bots',items:['Admin pode editar o dump de memória/contexto local de cada bot.','O Admin principal pode conceder a permissão específica a Vice-admins.','O contexto salvo é incluído nas instruções do bot nas próximas respostas.']},
     {version:'0.5.28',title:'Histórico de atualizações',items:['A versão agora é clicável e abre este registro de alterações.']},
     {version:'0.5.27',title:'Respostas coerentes com o histórico',items:['O bot verifica se a resposta mantém continuidade com a conversa.','Quando detecta uma incoerência clara, tenta gerar uma resposta corrigida usando o contexto recente.']},
     {version:'0.5.26',title:'Painel de personagens',items:['Ações administrativas dos personagens reunidas no botão de edição.','Acesso rápido à fotossensibilidade e aos dados de autor e dono.']},
@@ -2239,14 +2240,31 @@ function showAppUpdateLog() {
   document.body.appendChild(overlay);
 }
 
+async function showBotLocalMemoryEditor(characterId) {
+  if(!state.currentUser?.isAdmin&&!canAdminPermission('manage_bot_memory'))return toast('Você não tem permissão para acessar a memória dos bots.','error');
+  const character=DB.get('characters',[]).find(c=>c.id===characterId);
+  if(!character)return toast('Personagem não encontrado.','error');
+  let current=character.localContext||'';
+  try { const result=await emmaApi('admin_get_bot_memory',{characterId}); current=String(result.localContext||''); }
+  catch(e){return toast(e.message||'Não foi possível carregar o contexto.','error');}
+  const overlay=document.createElement('div');overlay.className='modal-overlay';
+  const modal=document.createElement('div');modal.className='modal';modal.style.maxWidth='620px';
+  modal.innerHTML='<div class="modal-header"><h3>🧠 Memória / contexto local — '+escapeHtml(character.name)+'</h3><button class="modal-close" type="button">×</button></div><p>Este texto é anexado às instruções do bot como contexto adicional. Use para registrar fatos persistentes, relações, cenário atual e acontecimentos importantes. Máximo: 8.000 caracteres.</p><label class="field"><span>Dump de memória / contexto local</span><textarea class="input" id="bot-local-memory" rows="12" maxlength="8000" placeholder="Ex.: contexto atual, fatos que o bot deve lembrar..."></textarea></label><div class="admin-row-sub" id="bot-local-memory-count"></div><div class="modal-actions"><button class="btn btn-secondary" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>Salvar contexto</button></div>';
+  overlay.append(modal);document.body.append(overlay);
+  const area=modal.querySelector('#bot-local-memory'),count=modal.querySelector('#bot-local-memory-count');
+  area.value=current;const updateCount=()=>count.textContent=area.value.length.toLocaleString('pt-BR')+' / 8.000 caracteres';updateCount();area.addEventListener('input',updateCount);
+  const close=()=>overlay.remove();modal.querySelector('.modal-close').onclick=close;modal.querySelector('[data-cancel]').onclick=close;
+  modal.querySelector('[data-save]').onclick=async()=>{const button=modal.querySelector('[data-save]');button.disabled=true;button.textContent='Salvando...';try{const localContext=area.value.trim();await emmaApi('admin_save_bot_memory',{characterId,localContext});character.localContext=localContext;toast('Memória/contexto atualizado.','success');close();}catch(e){toast(e.message||'Não foi possível salvar o contexto.','error');button.disabled=false;button.textContent='Salvar contexto';}};
+}
 function showAdminCharacterActionsModal(characterId) {
   const c=DB.get('characters',[]).find(x=>x.id===characterId);
   if(!c)return toast('Personagem não encontrado.','error');
   const admin=!!state.currentUser?.isAdmin, canEdit=canEditCharacter(c);
-  const canDelete=admin||canAdminPermission('delete_characters'), canBan=admin||canAdminPermission('ban_characters');
+  const canDelete=admin||canAdminPermission('delete_characters'), canBan=admin||canAdminPermission('ban_characters'), canMemory=admin||canAdminPermission('manage_bot_memory');
   let actions='';
   if(canEdit) actions+='<button class="btn btn-secondary btn-full" data-action="edit">✏️ Editar personagem</button><button class="btn btn-secondary btn-full" data-action="online">'+(c.isOnline?'⚫ Marcar offline':'🟢 Marcar online')+'</button>';
   if(canBan) actions+='<button class="btn btn-secondary btn-full" data-action="ban">'+(c.isBanned?'Desbanir personagem':'🚫 Banir personagem')+'</button>';
+  if(canMemory) actions+='<button class="btn btn-secondary btn-full" data-action="memory">🧠 Memória / contexto local</button>';
   if(admin) actions+='<button class="btn btn-secondary btn-full" data-action="owner">👤 Trocar usuário controlador</button><label class="field"><span>Categoria do bot</span><select class="input" id="admin-character-category" '+(c.isOriginal?'disabled':'')+'><option value="official" '+(c.botCategory==='official'?'selected':'')+'>Bot oficial</option><option value="secondary" '+(c.botCategory!=='official'?'selected':'')+'>Bot secundário</option></select></label>';
   if(canDelete) actions+='<button class="btn btn-danger btn-full" data-action="delete">🗑️ Excluir personagem</button>';
   const overlay=document.createElement('div');overlay.className='modal-overlay';
@@ -2258,6 +2276,7 @@ function showAdminCharacterActionsModal(characterId) {
   modal.querySelector('[data-action="online"]')?.addEventListener('click',()=>{close();toggleCharOnline(characterId,!c.isOnline);});
   modal.querySelector('[data-action="ban"]')?.addEventListener('click',()=>{close();c.isBanned?unbanChar(characterId):showBanCharModal(characterId);});
   modal.querySelector('[data-action="owner"]')?.addEventListener('click',()=>{close();adminChangeCharacterOwner(characterId);});
+  modal.querySelector('[data-action="memory"]')?.addEventListener('click',()=>{close();showBotLocalMemoryEditor(characterId);});
   modal.querySelector('[data-action="delete"]')?.addEventListener('click',()=>{close();showAdminDeleteCharacterModal(characterId);});
   modal.querySelector('#admin-character-category')?.addEventListener('change',e=>adminSetBotCategory(characterId,e.target.value));
 }
@@ -2613,7 +2632,7 @@ async function confirmAdminDeleteUser(userId, button) {
     toast(e.message || 'Não foi possível excluir a conta.', 'error');
   }
 }
-const VICE_ADMIN_PERMISSIONS=[{"key":"delete_characters","label":"Excluir personagens"},{"key":"ban_characters","label":"Banir personagens"},{"key":"ban_users","label":"Banir usuários"},{"key":"view_users","label":"Ver usuários"},{"key":"delete_users","label":"Excluir usuários"},{"key":"manage_reports","label":"Gerenciar denúncias"},{"key":"edit_characters","label":"Modificar personagens normais"},{"key":"edit_vip_characters","label":"Modificar personagens VIPs"},{"key":"manage_missions","label":"Gerenciar missões"},{"key":"manage_economy","label":"Gerenciar moedas e assinaturas"},{"key":"reset_passwords","label":"Redefinir senhas"},{"key":"view_admin_logs","label":"Ver registros administrativos"}];
+const VICE_ADMIN_PERMISSIONS=[{"key":"delete_characters","label":"Excluir personagens"},{"key":"ban_characters","label":"Banir personagens"},{"key":"ban_users","label":"Banir usuários"},{"key":"view_users","label":"Ver usuários"},{"key":"delete_users","label":"Excluir usuários"},{"key":"manage_reports","label":"Gerenciar denúncias"},{"key":"edit_characters","label":"Modificar personagens normais"},{"key":"edit_vip_characters","label":"Modificar personagens VIPs"},{"key":"manage_bot_memory","label":"Ler e editar memória/contexto dos bots"},{"key":"manage_missions","label":"Gerenciar missões"},{"key":"manage_economy","label":"Gerenciar moedas e assinaturas"},{"key":"reset_passwords","label":"Redefinir senhas"},{"key":"view_admin_logs","label":"Ver registros administrativos"}];
 async function loadAdminAuditLogs(){
  const output=el('admin-audit-output');if(!output)return;
  output.textContent='Carregando registros...';
@@ -2630,7 +2649,7 @@ async function loadAdminAuditLogs(){
 async function grantViceAdmin(){const userId=el('vice-admin-candidate')?.value;if(!userId)return toast('Escolha um usuário.','error');try{await emmaApi('admin_manage_vice_admin',{userId,enabled:true});await loadEmmaBackendState();renderAdminPanel();toast('Vice-admin promovido.','success');}catch(e){toast(e.message||'Não foi possível promover.','error');}}
 async function revokeViceAdmin(userId){if(!confirm('Remover o cargo de Vice-admin e todas as permissões desta conta?'))return;try{await emmaApi('admin_manage_vice_admin',{userId,enabled:false});await loadEmmaBackendState();renderAdminPanel();toast('Cargo removido.','success');}catch(e){toast(e.message||'Não foi possível remover o cargo.','error');}}
 async function saveViceAdminPermissions(userId){const row=document.querySelector('[data-vice-admin-row="'+userId+'"]');if(!row)return;const permissions={};row.querySelectorAll('[data-vice-permission]').forEach(input=>permissions[input.dataset.vicePermission]=!!input.checked);try{await emmaApi('admin_save_vice_permissions',{userId,permissions});await loadEmmaBackendState();renderAdminPanel();toast('Permissões atualizadas.','success');}catch(e){toast(e.message||'Não foi possível salvar as permissões.','error');}}
-function applyViceAdminPanelVisibility(container){const user=state.currentUser;if(!user?.isViceAdmin)return;const allowed=key=>user.adminPermissions?.[key]===true;const canSeeCharacters=['edit_characters','edit_vip_characters','delete_characters','ban_characters'].some(allowed);for(const section of container.querySelectorAll('.admin-section')){const heading=section.querySelector('.admin-section-header')?.textContent||'';if(heading.includes('Solicitações'))section.classList.add('hidden');if(heading.includes('Denúncias')&&!allowed('manage_reports'))section.classList.add('hidden');if(heading.includes('Assinaturas')||heading.includes('Configurações de Custo')||heading.includes('Sincronização'))section.classList.add('hidden');if(heading.includes('Personagens')&&!canSeeCharacters)section.classList.add('hidden');if(heading.includes('Usuários')&&!['view_users','ban_users','delete_users','manage_economy','reset_passwords'].some(allowed))section.classList.add('hidden');if(heading.includes('Missões')&&!allowed('manage_missions'))section.classList.add('hidden');if(heading.includes('Registros administrativos')&&!allowed('view_admin_logs'))section.classList.add('hidden');for(const button of section.querySelectorAll('button[onclick],input[onchange]')){const action=button.getAttribute('onclick')||button.getAttribute('onchange')||'';if(/adminView(All|User)Chats/.test(action))button.classList.add('hidden');if(/showAdminDeleteCharacterModal/.test(action)&&!allowed('delete_characters'))button.classList.add('hidden');if(/showBanCharModal|unbanChar/.test(action)&&!allowed('ban_characters'))button.classList.add('hidden');if(/toggleCharOnline|showEditCharModal|toggleCharacterPhotosensitivity/.test(action)&&!allowed('edit_characters')&&!allowed('edit_vip_characters'))button.classList.add('hidden');if(/showAdminDeleteUserModal/.test(action)&&!allowed('delete_users'))button.classList.add('hidden');if(/showBanUserModal|unbanUser/.test(action)&&!allowed('ban_users'))button.classList.add('hidden');if(/adminAddCoins|adminSetSubscriptionBan/.test(action)&&!allowed('manage_economy'))button.classList.add('hidden');if(/adminResolveReport/.test(action)&&!allowed('manage_reports'))button.classList.add('hidden');if(/deleteMission|showAddMissionModal/.test(action)&&!allowed('manage_missions'))button.classList.add('hidden');if(/adminSetUserRole|manualGhPull|manualGhPush/.test(action))button.classList.add('hidden');}}}
+function applyViceAdminPanelVisibility(container){const user=state.currentUser;if(!user?.isViceAdmin)return;const allowed=key=>user.adminPermissions?.[key]===true;const canSeeCharacters=['edit_characters','edit_vip_characters','delete_characters','ban_characters','manage_bot_memory'].some(allowed);for(const section of container.querySelectorAll('.admin-section')){const heading=section.querySelector('.admin-section-header')?.textContent||'';if(heading.includes('Solicitações'))section.classList.add('hidden');if(heading.includes('Denúncias')&&!allowed('manage_reports'))section.classList.add('hidden');if(heading.includes('Assinaturas')||heading.includes('Configurações de Custo')||heading.includes('Sincronização'))section.classList.add('hidden');if(heading.includes('Personagens')&&!canSeeCharacters)section.classList.add('hidden');if(heading.includes('Usuários')&&!['view_users','ban_users','delete_users','manage_economy','reset_passwords'].some(allowed))section.classList.add('hidden');if(heading.includes('Missões')&&!allowed('manage_missions'))section.classList.add('hidden');if(heading.includes('Registros administrativos')&&!allowed('view_admin_logs'))section.classList.add('hidden');for(const button of section.querySelectorAll('button[onclick],input[onchange]')){const action=button.getAttribute('onclick')||button.getAttribute('onchange')||'';if(/adminView(All|User)Chats/.test(action))button.classList.add('hidden');if(/showAdminDeleteCharacterModal/.test(action)&&!allowed('delete_characters'))button.classList.add('hidden');if(/showBanCharModal|unbanChar/.test(action)&&!allowed('ban_characters'))button.classList.add('hidden');if(/toggleCharOnline|showEditCharModal|toggleCharacterPhotosensitivity/.test(action)&&!allowed('edit_characters')&&!allowed('edit_vip_characters'))button.classList.add('hidden');if(/showAdminDeleteUserModal/.test(action)&&!allowed('delete_users'))button.classList.add('hidden');if(/showBanUserModal|unbanUser/.test(action)&&!allowed('ban_users'))button.classList.add('hidden');if(/adminAddCoins|adminSetSubscriptionBan/.test(action)&&!allowed('manage_economy'))button.classList.add('hidden');if(/adminResolveReport/.test(action)&&!allowed('manage_reports'))button.classList.add('hidden');if(/deleteMission|showAddMissionModal/.test(action)&&!allowed('manage_missions'))button.classList.add('hidden');if(/adminSetUserRole|manualGhPull|manualGhPush/.test(action))button.classList.add('hidden');}}}
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
