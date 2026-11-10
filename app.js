@@ -2695,7 +2695,7 @@ function renderMissionCard(mission, user, done = false) {
         <div style="font-size:.7rem;color:var(--text-3);margin-top:3px">${progress}/${mission.target}${user.userType === "character" && mission.xpReward ? ` · +${mission.xpReward} XP` : ""}</div>
       </div>
       ${done ? `<span style="font-size:1.3rem">✅</span>` :
-        canClaim ? `<button class="mission-claim-btn" onclick="claimMission('${mission.id}', event)">+${mission.reward}🪙</button>` :
+        canClaim ? `<button class="mission-claim-btn" onclick="claimMission('${mission.id}', event)">${mission.reward ? '+' + mission.reward + '🪙' : 'Resgatar'}${mission.vipRewardDays ? ' · 👑 ' + mission.vipRewardDays + ' dia(s) VIP' : ''}</button>` :
         `<div class="mission-reward"><span>🪙</span><span>+${mission.reward}</span></div>`
       }
     </div>
