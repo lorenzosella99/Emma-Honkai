@@ -544,7 +544,7 @@ body.chat-open .bottom-nav { display: none !important; }
  .chat-messages {
   position: relative;
   isolation: isolate;
-  background: rgba(10,11,16,.55);
+  background: transparent;
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -556,7 +556,7 @@ body.chat-open .bottom-nav { display: none !important; }
 }
 .chat-messages::before {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
