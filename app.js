@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.25';
+const EMMA_APP_VERSION = '0.5.26';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2211,6 +2211,28 @@ async function adminSetBotCategory(characterId, category) {
   } catch(e) { toast(e.message||'Não foi possível alterar a categoria.', 'error'); }
 }
 
+function showAdminCharacterActionsModal(characterId) {
+  const c=DB.get('characters',[]).find(x=>x.id===characterId);
+  if(!c)return toast('Personagem não encontrado.','error');
+  const admin=!!state.currentUser?.isAdmin, canEdit=canEditCharacter(c);
+  const canDelete=admin||canAdminPermission('delete_characters'), canBan=admin||canAdminPermission('ban_characters');
+  let actions='';
+  if(canEdit) actions+='<button class="btn btn-secondary btn-full" data-action="edit">✏️ Editar personagem</button><button class="btn btn-secondary btn-full" data-action="online">'+(c.isOnline?'⚫ Marcar offline':'🟢 Marcar online')+'</button>';
+  if(canBan) actions+='<button class="btn btn-secondary btn-full" data-action="ban">'+(c.isBanned?'Desbanir personagem':'🚫 Banir personagem')+'</button>';
+  if(admin) actions+='<button class="btn btn-secondary btn-full" data-action="owner">👤 Trocar usuário controlador</button><label class="field"><span>Categoria do bot</span><select class="input" id="admin-character-category" '+(c.isOriginal?'disabled':'')+'><option value="official" '+(c.botCategory==='official'?'selected':'')+'>Bot oficial</option><option value="secondary" '+(c.botCategory!=='official'?'selected':'')+'>Bot secundário</option></select></label>';
+  if(canDelete) actions+='<button class="btn btn-danger btn-full" data-action="delete">🗑️ Excluir personagem</button>';
+  const overlay=document.createElement('div');overlay.className='modal-overlay';
+  const modal=document.createElement('div');modal.className='modal';modal.style.maxWidth='420px';
+  modal.innerHTML='<div class="modal-header"><h3>✏️ Opções do personagem</h3><button class="modal-close">×</button></div><div style="display:grid;gap:9px">'+(actions||'<p>Nenhuma outra ação disponível.</p>')+'</div><div class="modal-actions"><button class="btn btn-secondary" data-close>Fechar</button></div>';
+  overlay.append(modal);document.body.append(overlay);
+  const close=()=>overlay.remove();modal.querySelector('.modal-close').onclick=close;modal.querySelector('[data-close]').onclick=close;
+  modal.querySelector('[data-action="edit"]')?.addEventListener('click',()=>{close();showEditCharModal(characterId);});
+  modal.querySelector('[data-action="online"]')?.addEventListener('click',()=>{close();toggleCharOnline(characterId,!c.isOnline);});
+  modal.querySelector('[data-action="ban"]')?.addEventListener('click',()=>{close();c.isBanned?unbanChar(characterId):showBanCharModal(characterId);});
+  modal.querySelector('[data-action="owner"]')?.addEventListener('click',()=>{close();adminChangeCharacterOwner(characterId);});
+  modal.querySelector('[data-action="delete"]')?.addEventListener('click',()=>{close();showAdminDeleteCharacterModal(characterId);});
+  modal.querySelector('#admin-character-category')?.addEventListener('change',e=>adminSetBotCategory(characterId,e.target.value));
+}
 async function adminEditCharacterCredits(characterId) {
   if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode definir autor e dono.', 'error');
   const character=DB.get('characters',[]).find(c=>c.id===characterId);
@@ -2675,20 +2697,9 @@ function renderAdminPanel() {
             <div class="admin-row-sub">Controlador: ${escapeHtml(users.find(u=>u.id===c.ownerUserId)?.username || 'Nenhum')}</div><div class="admin-row-sub">Autor: ${escapeHtml(c.authorName||'Não definido')} · Dono: ${escapeHtml(c.ownerName||'Não definido')}</div>
           </div>
           <div class="admin-actions">
-            ${canEditCharacter(c) ? `<button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>
-            <label class="toggle-switch" title="Online/Offline">
-              <input type="checkbox" ${c.isOnline ? 'checked' : ''} onchange="toggleCharOnline('${c.id}', this.checked)">
-              <span class="toggle-slider"></span>
-            </label>` : ''}
-            ${c.isBanned
-              ? `<button class="btn btn-sm btn-secondary" onclick="unbanChar('${c.id}')">Desbanir</button>`
-              : `<button class="btn btn-sm btn-danger" onclick="showBanCharModal('${c.id}')">Banir</button>`
-            }
-            ${state.currentUser?.isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="adminChangeCharacterOwner('${c.id}')">👤 Trocar usuário</button>
-            <select class="input" style="max-width:150px" aria-label="Categoria do bot" onchange="adminSetBotCategory('${c.id}',this.value)" ${c.isOriginal ? 'disabled title="Emma é a personagem principal original"' : ''}><option value="official" ${c.botCategory==='official'?'selected':''}>Bot oficial</option><option value="secondary" ${c.botCategory!=='official'?'selected':''}>Bot secundário</option></select>
-            ${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : ''}<button class="btn btn-sm btn-secondary" onclick="adminEditCharacterCredits('${c.id}')">✍️ Autor e dono</button>` : ''}
-            ${canEditCharacter(c) ? `<button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>` : ''}
-            <button class="btn btn-sm btn-danger" onclick="showAdminDeleteCharacterModal('${c.id}')" title="Excluir personagem">🗑️</button>
+            ${canEditCharacter(c) ? `<button class="btn btn-sm ${c.isPhotosensitive ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCharacterPhotosensitivity('${c.id}')">${c.isPhotosensitive ? '☀️ Sensível' : 'Ativar fotossensibilidade'}</button>` : ''}
+            ${state.currentUser?.isAdmin ? `${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : ''}<button class="btn btn-sm btn-secondary" onclick="adminEditCharacterCredits('${c.id}')">✍️ Autor e dono</button>` : ''}
+            <button class="btn btn-sm btn-secondary" onclick="showAdminCharacterActionsModal('${c.id}')" title="Outras opções do personagem">✏️</button>
           </div>
         </div>
       `).join('')}
