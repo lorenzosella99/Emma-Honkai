@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.21';
+const EMMA_APP_VERSION = '0.5.22';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -264,7 +264,7 @@ async function loadEmmaBackendState() {
   const profiles = adminSession || viceSession ? (profileResult.profiles || []) : [ownProfile];
   const assignedCharacterId = ownProfile.assigned_character_id || null;
   // Carrega os personagens da conta antes das conversas recebidas.
-  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online'});
+  const charactersRows = viceSession ? (profileResult.characters || []) : await fetchAllEmmaRows('characters', null, {columns:'id,name,role_name,image,is_photosensitive,description,story_intro,age_years,height_cm,weight_kg,gender,bot_personality,control_mode,is_banned,is_vip,ban_until,ban_reason,owner_user_id,is_online,bot_category,is_original'});
   const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
   const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
   const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
@@ -298,7 +298,7 @@ async function loadEmmaBackendState() {
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', lore:c.lore || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
     gender:c.gender || 'other', botPersonality:c.bot_personality || '', controlMode:c.control_mode || 'both', isVip:!!c.is_vip, isBanned:!!c.is_banned,
     banUntil:c.ban_until ? Date.parse(c.ban_until) : null, banReason:c.ban_reason || '',
-    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online
+    ownerUserId:c.owner_user_id || null, isOnline:!!c.is_online, botCategory:c.bot_category === 'official' ? 'official' : 'secondary', isOriginal:!!c.is_original
   }));
   const chats = chatsRows.map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, characterIds:Array.isArray(c.character_ids)&&c.character_ids.length?c.character_ids:[c.character_id], lastMessage:c.last_message || '',
@@ -1212,12 +1212,13 @@ function renderCharsTab(container) {
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
       <div style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${state.characterFilter!=='vip'?'active':''}" onclick="setCharacterFilter('normal')">Normais</button><button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button></div></div>
-      <div class="section-title">🤖 Bots Online</div>
-      <div class="chars-grid" id="chars-grid-bots-online">
+      <div class="section-title">⭐ Bots oficiais</div>
+      <div style="padding:0 16px 8px;color:var(--text-3);font-size:.8rem">Personagens oficiais do Emma Honkai. Emma é a principal e original.</div>
+      <div class="chars-grid" id="chars-grid-bots-official">
         ${Array(2).fill(skeletonCard).join('')}
       </div>
-      <div class="section-title" style="margin-top:8px" id="sec-bots-all">🤖 Todos os Bots</div>
-      <div class="chars-grid" id="chars-grid-bots-all">
+      <div class="section-title" style="margin-top:14px">🤖 Bots secundários</div>
+      <div class="chars-grid" id="chars-grid-bots-secondary">
         ${Array(2).fill(skeletonCard).join('')}
       </div>
       <div id="players-section">
@@ -1251,9 +1252,8 @@ function _renderCharsContent(pref) {
   let bots = chars.filter(c => !c.isBanned && !c.ownerUserId && (category==="vip"?c.isVip:!c.isVip));
   if (pref === 'female') bots = bots.filter(c => c.gender === 'female');
   else if (pref === 'male') bots = bots.filter(c => c.gender === 'male');
-
-  const botsOnline = bots.filter(c => c.isOnline);
-  const botsOffline = bots.filter(c => !c.isOnline);
+  const officialBots = bots.filter(c => c.botCategory === 'official');
+  const secondaryBots = bots.filter(c => c.botCategory !== 'official');
 
   // Players who registered as "character" type
   const playerChars = users.filter(u =>
@@ -1269,13 +1269,13 @@ function _renderCharsContent(pref) {
   else if (pref === 'female') filteredPlayers = playerChars.filter(u => u.gender === 'female');
   else if (pref === 'male') filteredPlayers = playerChars.filter(u => u.gender === 'male');
 
-  const gbOn = el('chars-grid-bots-online');
-  const gbAll = el('chars-grid-bots-all');
+  const gbOfficial = el('chars-grid-bots-official');
+  const gbSecondary = el('chars-grid-bots-secondary');
   const gpPlayers = el('chars-grid-players');
   const playersSec = el('players-section');
 
-  if (gbOn) renderCharGrid(gbOn, botsOnline);
-  if (gbAll) renderCharGrid(gbAll, botsOffline);
+  if (gbOfficial) renderCharGrid(gbOfficial, officialBots);
+  if (gbSecondary) renderCharGrid(gbSecondary, secondaryBots);
   if (gpPlayers) {
     gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
     emmaApi("creator_directory",{}).then(({creators=[]})=>{
@@ -1334,7 +1334,7 @@ function renderCharGrid(container, chars) {
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
-          <div class="char-name">${escapeHtml(c.name)} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
+          <div class="char-name">${escapeHtml(c.name)} ${c.isOriginal ? '<span class="chip chip-gold">Principal · Original</span>' : c.botCategory === 'official' ? '<span class="chip">Oficial</span>' : ''} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
           <div class="char-role">${escapeHtml(c.role)}</div>
         </div>
       </div>
@@ -2197,6 +2197,20 @@ async function adminRejectCharacterRequest(userId) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+async function adminSetBotCategory(characterId, category) {
+  if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode alterar a categoria dos bots.', 'error');
+  if (!['official','secondary'].includes(category)) return toast('Categoria inválida.', 'error');
+  try {
+    await emmaApi('admin_set_bot_category', {characterId, category});
+    const chars=DB.get('characters',[]);
+    const char=chars.find(c=>c.id===characterId);
+    if(char) char.botCategory=category;
+    DB.set('characters',chars);
+    toast(category==='official'?'Bot movido para oficiais.':'Bot movido para secundários.','success');
+    renderAdminPanel();
+  } catch(e) { toast(e.message||'Não foi possível alterar a categoria.', 'error'); }
+}
+
 async function adminChangeCharacterOwner(characterId) {
   if (!state.currentUser?.isAdmin) return toast('Apenas o Admin principal pode trocar o controlador.', 'error');
   const users=DB.get('users',[]);
@@ -2645,7 +2659,9 @@ function renderAdminPanel() {
               ? `<button class="btn btn-sm btn-secondary" onclick="unbanChar('${c.id}')">Desbanir</button>`
               : `<button class="btn btn-sm btn-danger" onclick="showBanCharModal('${c.id}')">Banir</button>`
             }
-            ${state.currentUser?.isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="adminChangeCharacterOwner('${c.id}')">👤 Trocar usuário</button>` : ''}
+            ${state.currentUser?.isAdmin ? `<button class="btn btn-sm btn-secondary" onclick="adminChangeCharacterOwner('${c.id}')">👤 Trocar usuário</button>
+            <select class="input" style="max-width:150px" aria-label="Categoria do bot" onchange="adminSetBotCategory('${c.id}',this.value)" ${c.isOriginal ? 'disabled title="Emma é a personagem principal original"' : ''}><option value="official" ${c.botCategory==='official'?'selected':''}>Bot oficial</option><option value="secondary" ${c.botCategory!=='official'?'selected':''}>Bot secundário</option></select>
+            ${c.isOriginal ? '<span class="chip chip-gold">Principal · Original</span>' : ''}` : ''}
             ${canEditCharacter(c) ? `<button class="btn btn-sm btn-secondary" onclick="showEditCharModal('${c.id}')">✏️</button>` : ''}
             <button class="btn btn-sm btn-danger" onclick="showAdminDeleteCharacterModal('${c.id}')" title="Excluir personagem">🗑️</button>
           </div>
