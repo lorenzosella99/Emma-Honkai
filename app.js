@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.44';
+const EMMA_APP_VERSION = '0.5.45';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2327,6 +2327,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.45',title:'Todos os códigos na aba Admin',items:['A aba Admin agora mostra os códigos de usuário, Vice-admin e Admin.','Cada código tem botão para copiar e exibe sua validade.','Os códigos continuam visíveis somente para o Admin principal.']},
     {version:'0.5.44',title:'Códigos permanentes e temporários de administrador',items:['O Admin principal agora possui um código permanente de recuperação e um código temporário exclusivo para o dia seguinte.','Os códigos ficam disponíveis na aba Admin, com validade e botão para copiar.','A autenticação separa os códigos administrativos dos convites de cadastro e exige usuário e função correspondentes.']},
     {version:'0.5.43',title:'Missões de reações emocionais',items:['Os desafios diários agora pedem reações específicas: paixão, compaixão, raiva, confiança, diversão, ciúmes ou admiração.','A conclusão é avaliada no servidor, verificando se a própria personagem demonstrou a reação no roleplay.','Continuam necessárias pelo menos 5 mensagens do jogador e 5 respostas da personagem no dia.']},
     {version:'0.5.42',title:'Apagar histórico das conversas pelo Perfil',items:['Nova opção para apagar as mensagens de todos os chats da conta de jogador de uma só vez.','As conversas permanecem na lista, mas ficam vazias; a opção não aparece em contas do tipo personagem.','O histórico de atualizações e as estatísticas da conta são preservados.']},
@@ -2870,12 +2871,18 @@ async function loadAdminAccessCodes() {
     const date = new Date(result.notBefore);
     const dateLabel = date.toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
     const startLabel = date.toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit'});
-    target.innerHTML = '<div class="admin-row" style="align-items:flex-start;flex-direction:column;gap:6px"><b>🔐 Código permanente do Admin</b><code style="display:block;white-space:normal;overflow-wrap:anywhere;user-select:all">'+escapeHtml(result.permanentCode)+'</code><button class="btn btn-secondary btn-sm" onclick="copyAdminAccessCode(\'permanent\')">Copiar permanente</button><div class="admin-row-sub">Sem vencimento. Guarde em local privado.</div></div>' +
-      '<div class="admin-row" style="align-items:flex-start;flex-direction:column;gap:6px;margin-top:12px"><b>🕛 Código temporário de amanhã — '+escapeHtml(dateLabel)+'</b><code style="display:block;white-space:normal;overflow-wrap:anywhere;user-select:all">'+escapeHtml(result.temporaryCode)+'</code><button class="btn btn-secondary btn-sm" onclick="copyAdminAccessCode(\'temporary\')">Copiar código de amanhã</button><div class="admin-row-sub">Ativo das '+escapeHtml(startLabel)+' até 23:59:59 (Brasília).</div></div>';
+    const expiryLabel = value => value ? new Date(value).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : 'não definida';
+    const item = (title,value,kind,description) => '<div class="admin-row" style="align-items:flex-start;flex-direction:column;gap:6px;margin-top:12px"><b>'+title+'</b><code style="display:block;white-space:normal;overflow-wrap:anywhere;user-select:all">'+escapeHtml(value||'Não configurado')+'</code><button class="btn btn-secondary btn-sm" onclick="copyAdminAccessCode(\''+kind+'\')">Copiar</button><div class="admin-row-sub">'+description+'</div></div>';
+    target.innerHTML =
+      item('👤 Código de usuário',result.userCode,'user','Cadastro e acesso comum. Expira: '+expiryLabel(result.userExpiresAt))+
+      item('🛡️ Código de Vice-admin',result.viceCode,'vice','Exclusivo da conta de Vice-admin. Expira: '+expiryLabel(result.viceExpiresAt))+
+      item('🔐 Código permanente do Admin',result.permanentCode,'permanent','Sem vencimento. Guarde em local privado.')+
+      item('🕛 Código temporário do Admin — '+dateLabel,result.temporaryCode,'temporary','Ativo das '+startLabel+' até 23:59:59 (Brasília).');
   } catch (error) { const target=el('admin-access-codes-output'); if(target)target.textContent=error.message||'Não foi possível carregar os códigos.'; }
 }
 async function copyAdminAccessCode(kind) {
-  const value=kind==='permanent'?currentAdminAccessCodes?.permanentCode:currentAdminAccessCodes?.temporaryCode;
+  const codeMap={user:currentAdminAccessCodes?.userCode,vice:currentAdminAccessCodes?.viceCode,permanent:currentAdminAccessCodes?.permanentCode,temporary:currentAdminAccessCodes?.temporaryCode};
+  const value=codeMap[kind];
   if(!value)return toast('Carregue os códigos antes de copiar.','error');
   try { await navigator.clipboard.writeText(value); toast('Código copiado.','success'); }
   catch (_) { const area=document.createElement('textarea');area.value=value;document.body.appendChild(area);area.select();const ok=document.execCommand('copy');area.remove();toast(ok?'Código copiado.':'Não foi possível copiar automaticamente.',ok?'success':'error'); }
