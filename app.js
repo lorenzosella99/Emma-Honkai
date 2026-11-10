@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.46';
+const EMMA_APP_VERSION = '0.5.47';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -272,7 +272,7 @@ async function loadEmmaBackendState() {
     viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession ? {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,created_at'} : {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,created_at',or:characterChatFilter}),
     adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : viceSession ? (profileResult.reports || []) : Promise.resolve([]),
     adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
-    viceSession ? (profileResult.missions || []) : fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,type,target,is_new_user'}),
+    viceSession ? (profileResult.missions || []) : fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,vip_reward_days,type,target,is_new_user'}),
     emmaApi('get_public_config')
   ]);
 
@@ -324,7 +324,7 @@ async function loadEmmaBackendState() {
   }));
   DB.set('users', users); DB.set('characters', characters); DB.set('chats', chats);
   DB.set('messages', messages); DB.set('reports', reports); DB.set('character_applications', applications);
-  DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,xpReward:Number(m.xp_reward||0),type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
+  DB.set('missions', missionRows.map(m => ({id:m.id,title:m.title,description:m.description,desc:m.description,icon:m.icon,reward:m.reward,xpReward:Number(m.xp_reward||0),vipRewardDays:Number(m.vip_reward_days||0),type:m.type,target:m.target,isNewUser:!!m.is_new_user})));
   if (publicConfig?.config) { const config = cfg(); Object.assign(config, publicConfig.config); DB.set('config', config); }
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
@@ -1752,10 +1752,19 @@ function parseTypedMessage(raw) {
 }
 
 // ─── SEND MESSAGE ─────────────────────────────────────────────────────────────
+function isPremiumChatPausedLocal(activeChat) {
+ if (isPremiumActive()) return false;
+ const chats=DB.get('chats',[]).filter(c=>c.userId===state.currentUser?.id&&c.charId===activeChat.charId);
+ if(chats.length<2)return false;
+ chats.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)||String(a.id).localeCompare(String(b.id)));
+ return chats[0].id!==activeChat.chatId;
+}
+
 async function sendMessage() {
   const input = el('chat-input');
   const text = input.value.trim();
   if (!text || state.isTyping) return;
+  if (state.currentChat && isPremiumChatPausedLocal(state.currentChat)) return toast('Este chat extra está pausado porque seu Emma Premium expirou. Reative o VIP para continuar. Seu histórico está preservado.', 'error', 5000);
 
   // O tipo é identificado pelos delimitadores digitados, sem botões.
   const parsed = parseTypedMessage(text);
@@ -2589,7 +2598,7 @@ async function renderDailyChallengesTab(container, embedded = false) {
           <div class="daily-challenge-icon">${escapeHtml(result.challenge.icon)}</div>
           <h2>${escapeHtml(result.challenge.title)}</h2>
           <p>${escapeHtml(result.challenge.description)}</p>
-          <div class="daily-challenge-reward">🪙 500.000 moedas</div>
+          <div class="daily-challenge-reward">🪙 500.000 moedas · 👑 1 dia de VIP</div>
         </div>
         <div class="daily-challenge-card">
           <h3>Como concluir</h3>
@@ -2625,7 +2634,7 @@ async function claimDailyChallenge(button) {
     await loadEmmaBackendState();
     const rect=button.getBoundingClientRect();
     coinFly(result.reward,rect.left,rect.top);
-    toast('+500.000 moedas — desafio diário concluído!','gold',4500);
+    toast('+500.000 moedas + 1 dia de Emma VIP — desafio diário concluído!','gold',5000);
     updateCoinsDisplay();switchTab('missions');updateNavBadges();
   } catch(error) {
     toast(error.message||'Não foi possível concluir o desafio.','error');
@@ -3543,6 +3552,7 @@ function showAddMissionModal() {
       <div class="form-row">
         <div class="field"><label>Recompensa🪙</label><input type="number" class="input" id="mf-reward" value="50" min="0"></div>
         <div class="field"><label>Recompensa de XP</label><input type="number" class="input" id="mf-xp" value="100" min="0"></div>
+        <div class="field"><label>Recompensa VIP (dias)</label><input type="number" class="input" id="mf-vip-days" value="0" min="0" max="30"></div>
         <div class="field"><label>Meta</label><input type="number" class="input" id="mf-target" value="1" min="1"></div>
       </div>
       <div class="field">
@@ -3570,7 +3580,7 @@ async function saveMission(btn) {
   if (!title) return toast('Título obrigatório.', 'error');
   const mission = {
     id: 'm_' + Date.now(), title, description: el('mf-desc').value.trim(),
-    icon: el('mf-icon').value || '🎯', reward: parseInt(el('mf-reward').value) || 0, xpReward:Math.max(0,parseInt(el('mf-xp').value)||0),
+    icon: el('mf-icon').value || '🎯', reward: parseInt(el('mf-reward').value) || 0, xpReward:Math.max(0,parseInt(el('mf-xp').value)||0), vipRewardDays:Math.max(0,Math.min(30,parseInt(el('mf-vip-days').value)||0)),
     target: parseInt(el('mf-target').value) || 1, type: el('mf-type').value, isNewUser: false
   };
   try {
