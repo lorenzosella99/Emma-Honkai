@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.30';
+const EMMA_APP_VERSION = '0.5.31';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2217,20 +2217,21 @@ async function adminVerifyUserAge(userId) {
   if(!state.currentUser?.isAdmin)return toast('Somente o Admin principal pode verificar idade.','error');
   const user=DB.get('users',[]).find(x=>x.id===userId);if(!user)return toast('Usuário não encontrado.','error');
   if(user.adultAgeVerified){if(!confirm('Revogar a verificação de idade desta conta?'))return;try{await emmaApi('admin_set_age_verification',{kind:'user',userId,verified:false});user.adultAgeVerified=false;DB.set('users',DB.get('users',[]));toast('Verificação revogada.','success');renderAdminPanel();}catch(e){toast(e.message||'Falha ao revogar.','error');}return;}
-  const raw=prompt('Após conferir a documentação fora do sistema, informe a idade confirmada (20 a 120 anos):',String(user.ageYears??''));if(raw===null)return;const age=Number(raw);
-  if(!Number.isInteger(age)||age<=19||age>120)return toast('A idade confirmada deve ser maior que 19 anos.','error');
+  const raw=prompt('Após conferir a documentação fora do sistema, informe a idade confirmada (18 a 120 anos):',String(user.ageYears??''));if(raw===null)return;const age=Number(raw);
+  if(!Number.isInteger(age)||age<18||age>120)return toast('A idade mínima da conta é 18 anos.','error');
   try{await emmaApi('admin_set_age_verification',{kind:'user',userId,ageYears:age,verified:true});user.ageYears=age;user.adultAgeVerified=true;DB.set('users',DB.get('users',[]));toast('Idade da conta verificada pelo Admin.','success');renderAdminPanel();}catch(e){toast(e.message||'Falha ao verificar idade.','error');}
 }
 async function adminVerifyCharacterAge(characterId) {
   if(!state.currentUser?.isAdmin)return toast('Somente o Admin principal pode verificar idade.','error');
   const c=DB.get('characters',[]).find(x=>x.id===characterId);if(!c)return toast('Personagem não encontrado.','error');
-  if(!c.adultAgeVerified&&(!Number.isInteger(Number(c.ageYears))||Number(c.ageYears)<=19))return toast('O personagem precisa ter idade cadastrada acima de 19 anos. Edite a ficha antes de verificar.','error');
+  if(!c.adultAgeVerified&&(!Number.isInteger(Number(c.ageYears))||Number(c.ageYears)<19))return toast('O personagem precisa ter idade cadastrada de pelo menos 19 anos. Edite a ficha antes de verificar.','error');
   if(c.adultAgeVerified&&!confirm('Revogar a verificação de idade deste personagem?'))return;
   try{await emmaApi('admin_set_age_verification',{kind:'character',characterId,verified:!c.adultAgeVerified});c.adultAgeVerified=!c.adultAgeVerified;DB.set('characters',DB.get('characters',[]));toast(c.adultAgeVerified?'Idade do personagem verificada.':'Verificação revogada.','success');renderAdminPanel();}catch(e){toast(e.message||'Falha ao alterar verificação.','error');}
 }
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.5.31',title:'Idades mínimas e idade confirmada pelo Admin',items:['O Admin principal define a idade exata confirmada para cada conta: mínimo de 18 anos.','O Admin principal verifica a idade cadastrada de cada personagem: mínimo de 19 anos.','A elegibilidade continua exigindo conta verificada, personagem VIP e personagem verificado.']},
     {version:'0.5.30',title:'Alterações privadas no VIP e verificação de idade com o Admin',items:['Verificação administrativa separada para conta do usuário e personagem.','Elegibilidade de temas maduros permitidos exige conta aprovada, personagem VIP, idade acima de 19 anos e aprovação do Admin principal.','Aprovações e revogações são registradas no servidor; alterações na idade do personagem invalidam a aprovação anterior.']},
     {version:'0.5.29',title:'Memória e contexto local dos bots',items:['Admin pode editar o dump de memória/contexto local de cada bot.','O Admin principal pode conceder a permissão específica a Vice-admins.','O contexto salvo é incluído nas instruções do bot nas próximas respostas.']},
     {version:'0.5.28',title:'Histórico de atualizações',items:['A versão agora é clicável e abre este registro de alterações.']},
