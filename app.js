@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.45';
+const EMMA_APP_VERSION = '0.5.46';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2887,6 +2887,28 @@ async function copyAdminAccessCode(kind) {
   try { await navigator.clipboard.writeText(value); toast('Código copiado.','success'); }
   catch (_) { const area=document.createElement('textarea');area.value=value;document.body.appendChild(area);area.select();const ok=document.execCommand('copy');area.remove();toast(ok?'Código copiado.':'Não foi possível copiar automaticamente.',ok?'success':'error'); }
 }
+async function adminGenerateDailyChallenge(button) {
+  if (!canAdminPermission('manage_missions')) return toast('Acesso negado.', 'error');
+  const promptText = String(el('admin-daily-challenge-prompt')?.value || '').trim();
+  if (promptText.length < 8) return toast('Escreva uma instrução um pouco mais detalhada.', 'error');
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = 'Criando desafio…';
+  const output = el('admin-daily-challenge-result');
+  if (output) output.textContent = 'A IA está preparando o desafio e publicando para hoje…';
+  try {
+    const result = await emmaApi('admin_generate_daily_challenge', { prompt: promptText });
+    if (output) output.textContent = result.challenge.title + ' — ' + result.challenge.description + ' | Meta: ' + result.challenge.goal;
+    toast('Desafio diário publicado!', 'success');
+  } catch (error) {
+    if (output) output.textContent = error.message || 'Não foi possível criar o desafio.';
+    toast(error.message || 'Não foi possível criar o desafio.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
@@ -2898,6 +2920,14 @@ function renderAdminPanel() {
   const characterRequests = users.filter(u => u.characterRequest?.status === 'pending' && !u.assignedCharacterId && !chars.some(c => c.ownerUserId === u.id));
   const pendingReports = DB.get('reports', []).filter(r => r.status === 'pending');
   container.innerHTML = `
+    \${canAdminPermission('manage_missions') ? \`
+    <div class="admin-section">
+      <div class="admin-section-header">🎯 Criar desafio diário com IA</div>
+      <div class="admin-row-sub">Escreva uma instrução simples. A IA gratuita transforma em um desafio; o servidor valida a conclusão. O novo desafio vale para hoje.</div>
+      <textarea class="input" id="admin-daily-challenge-prompt" rows="3" maxlength="500" placeholder="Ex.: crie um desafio de confiança que exija uma conversa longa e uma revelação espontânea da personagem" style="width:100%;margin-top:10px;resize:vertical"></textarea>
+      <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="adminGenerateDailyChallenge(this)">Gerar e publicar desafio de hoje</button>
+      <div id="admin-daily-challenge-result" class="admin-row-sub" style="margin-top:10px"></div>
+    </div>\` : ''}
     ${state.currentUser?.isAdmin ? '<div class="admin-section"><div class="admin-section-header">🔑 Códigos de acesso do Admin</div><div class="admin-row-sub">Código permanente para recuperação e código temporário já preparado para amanhã.</div><div id="admin-access-codes-output" class="admin-row-sub" style="margin-top:10px">Carregando códigos…</div><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="loadAdminAccessCodes()">Atualizar códigos</button></div>' : ''}
     <div class="admin-section">
       <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
