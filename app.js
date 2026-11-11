@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.48';
+const EMMA_APP_VERSION = '0.5.49';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1344,12 +1344,30 @@ function renderCharGrid(container, chars) {
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
-          <div class="char-name">${escapeHtml(c.name)} ${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : c.botCategory === 'official' ? '<span class="chip chip-verified">✓ Oficial verificado</span>' : '<span class="chip chip-verified">✓ Secundário verificado</span>'} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
+          <div class="char-name"><button type="button" class="char-name-trigger" onclick="event.stopPropagation();showCharacterDetailsModal('${c.id}')">${escapeHtml(c.name)}</button> ${c.isOriginal ? '<span class="chip chip-gold">★ Principal · Original</span>' : c.botCategory === 'official' ? '<span class="chip chip-verified">✓ Oficial verificado</span>' : '<span class="chip chip-verified">✓ Secundário verificado</span>'} ${c.isVip ? '<span class="chip chip-gold">VIP</span>' : ""}</div>
           <div class="char-role">${escapeHtml(c.role)}</div>${c.authorName||c.ownerName ? `<div class="char-role">${c.authorName ? 'Autor: '+escapeHtml(c.authorName) : ''}${c.authorName&&c.ownerName ? ' · ' : ''}${c.ownerName ? 'Dono: '+escapeHtml(c.ownerName) : ''}</div>` : ''}
         </div>
       </div>
     `;
   }).join('');
+}
+
+
+function showCharacterDetailsModal(characterId) {
+  const c=DB.get('characters',[]).find(x=>String(x.id)===String(characterId));
+  if(!c)return toast('Personagem não encontrado.','error');
+  const overlay=document.createElement('div');overlay.className='modal-overlay character-details-overlay';
+  const modal=document.createElement('div');modal.className='modal-sheet character-details-modal';
+  const row=(label,value)=>value!==null&&value!==undefined&&String(value).trim()!==''?'<div class="character-detail-row"><span>'+label+'</span><strong>'+escapeHtml(String(value))+'</strong></div>':'';
+  const age=c.ageYears!==null&&c.ageYears!==undefined?String(c.ageYears)+' anos':'';
+  const height=c.heightCm!==null&&c.heightCm!==undefined?String(c.heightCm)+' cm':'';
+  const weight=c.weightKg!==null&&c.weightKg!==undefined?String(c.weightKg)+' kg':'';
+  const gender={female:'Feminino',male:'Masculino',other:'Não informado'}[c.gender]||c.gender||'';
+  const image=getHideCharacterImages()?FALLBACK_SVG:characterImageSource(c.image,c.id,c.isPhotosensitive);
+  modal.innerHTML='<div class="modal-handle"></div><div class="character-details-head"><img src="'+image+'" alt="" onerror="this.src=\''+FALLBACK_SVG+'\'"><div><h2>'+escapeHtml(c.name)+'</h2><p>'+escapeHtml(c.role||'Personagem')+'</p></div><button type="button" class="modal-close" aria-label="Fechar">×</button></div><div class="character-details-body">'+row('Idade',age)+row('Altura',height)+row('Peso',weight)+row('Gênero',gender)+row('Categoria',c.botCategory==='official'?'Oficial':'Secundário')+row('Autor',c.authorName)+row('Dono',c.ownerName)+(c.isVip?'<div class="character-detail-row"><span>Plano</span><strong>VIP</strong></div>':'')+(c.description?'<section><h3>Descrição</h3><p>'+escapeHtml(c.description)+'</p></section>':'')+(c.storyIntro?'<section><h3>Início da história</h3><p>'+escapeHtml(c.storyIntro)+'</p></section>':'')+(c.botPersonality?'<section><h3>Personalidade</h3><p>'+escapeHtml(c.botPersonality)+'</p></section>':'')+'</div><button type="button" class="btn btn-primary btn-full character-details-chat">Conversar com '+escapeHtml(c.name)+'</button>';
+  overlay.append(modal);document.body.append(overlay);
+  const close=()=>overlay.remove();modal.querySelector('.modal-close').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  modal.querySelector('.character-details-chat').onclick=()=>{close();openChat(c.id);};
 }
 
 function renderPlayerGrid(container, players) {
