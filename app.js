@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.49';
+const EMMA_APP_VERSION = '0.5.50';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1363,8 +1363,12 @@ function showCharacterDetailsModal(characterId) {
   const height=c.heightCm!==null&&c.heightCm!==undefined?String(c.heightCm)+' cm':'';
   const weight=c.weightKg!==null&&c.weightKg!==undefined?String(c.weightKg)+' kg':'';
   const gender={female:'Feminino',male:'Masculino',other:'Não informado'}[c.gender]||c.gender||'';
-  const image=getHideCharacterImages()?FALLBACK_SVG:characterImageSource(c.image,c.id,c.isPhotosensitive);
-  modal.innerHTML='<div class="modal-handle"></div><div class="character-details-head"><img src="'+image+'" alt="" onerror="this.src=\''+FALLBACK_SVG+'\'"><div><h2>'+escapeHtml(c.name)+'</h2><p>'+escapeHtml(c.role||'Personagem')+'</p></div><button type="button" class="modal-close" aria-label="Fechar">×</button></div><div class="character-details-body">'+row('Idade',age)+row('Altura',height)+row('Peso',weight)+row('Gênero',gender)+row('Categoria',c.botCategory==='official'?'Oficial':'Secundário')+row('Autor',c.authorName)+row('Dono',c.ownerName)+(c.isVip?'<div class="character-detail-row"><span>Plano</span><strong>VIP</strong></div>':'')+(c.description?'<section><h3>Descrição</h3><p>'+escapeHtml(c.description)+'</p></section>':'')+(c.storyIntro?'<section><h3>Início da história</h3><p>'+escapeHtml(c.storyIntro)+'</p></section>':'')+(c.botPersonality?'<section><h3>Personalidade</h3><p>'+escapeHtml(c.botPersonality)+'</p></section>':'')+'</div><button type="button" class="btn btn-primary btn-full character-details-chat">Conversar com '+escapeHtml(c.name)+'</button>';
+  modal.innerHTML='<div class="modal-handle"></div><div class="character-details-head"><div class="character-details-title"><h2>'+escapeHtml(c.name)+'</h2><p>'+escapeHtml(c.role||'Personagem')+'</p></div><button type="button" class="modal-close" aria-label="Fechar">×</button></div><div class="character-details-body">'+row('Idade',age)+row('Altura',height)+row('Peso',weight)+row('Gênero',gender)+row('Categoria',c.botCategory==='official'?'Oficial':'Secundário')+row('Autor',c.authorName)+row('Dono',c.ownerName)+(c.isVip?'<div class="character-detail-row"><span>Plano</span><strong>VIP</strong></div>':'')+(c.description?'<section><h3>Descrição</h3><p>'+escapeHtml(c.description)+'</p></section>':'')+(c.storyIntro?'<section><h3>Início da história</h3><p>'+escapeHtml(c.storyIntro)+'</p></section>':'')+(c.botPersonality?'<section><h3>Personalidade</h3><p>'+escapeHtml(c.botPersonality)+'</p></section>':'')+'</div><button type="button" class="btn btn-primary btn-full character-details-chat">Conversar com '+escapeHtml(c.name)+'</button>';
+  const avatar=document.createElement('img');
+  avatar.className='character-details-avatar';avatar.alt='Imagem de '+String(c.name||'personagem');
+  avatar.src=characterImageSource(c.image,c.id,c.isPhotosensitive);
+  avatar.onerror=()=>{avatar.onerror=null;avatar.src=FALLBACK_SVG;};
+  modal.querySelector('.character-details-head').prepend(avatar);
   overlay.append(modal);document.body.append(overlay);
   const close=()=>overlay.remove();modal.querySelector('.modal-close').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
   modal.querySelector('.character-details-chat').onclick=()=>{close();openChat(c.id);};
