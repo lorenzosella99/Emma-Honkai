@@ -1371,3 +1371,15 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 .character-details-body section p{margin:0;color:var(--text-2);font-size:.84rem;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .character-details-chat{margin-top:4px}
 @media(max-width:420px){.character-details-overlay{padding:8px}.character-details-modal{padding:16px}.character-details-head img{width:64px;height:64px}}
+
+/* Ajuste do modal de detalhes: imagem criada via DOM para não quebrar o SVG */
+.character-details-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);padding:16px;overflow-y:auto}
+.character-details-modal{position:relative;display:flex;flex-direction:column;width:min(100%,520px);max-height:88dvh;overflow-y:auto;margin:auto;border-radius:20px;padding:20px;background:var(--bg-2);border:1px solid var(--border)}
+.character-details-head{display:flex;align-items:center;gap:14px;position:relative;padding:4px 34px 16px 0;min-width:0}
+.character-details-avatar{display:block;flex:0 0 76px;width:76px;height:76px;max-width:76px;object-fit:cover;border-radius:14px;background:var(--bg-3)}
+.character-details-title{min-width:0;overflow-wrap:anywhere}
+.character-details-title h2{margin:0 0 5px;font-size:1.2rem}
+.character-details-title p{margin:0;color:var(--text-2);font-size:.84rem}
+.character-details-head .modal-close{position:absolute;right:0;top:0}
+.character-details-body{display:grid;gap:9px;margin:4px 0 18px}
+@media(max-width:420px){.character-details-overlay{padding:10px}.character-details-modal{padding:16px}.character-details-avatar{flex-basis:64px;width:64px;height:64px;max-width:64px}}
