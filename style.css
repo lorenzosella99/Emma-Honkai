@@ -1465,3 +1465,8 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 
 /* Cada criador ocupa uma linha completa: usuário, personagens e depois o próximo usuário */
 #chars-grid-players .creator-compact-group{grid-column:1 / -1;width:100%;display:block}
+
+
+/* Corrige a camada decorativa do banner que podia bloquear o botão de edição */
+.profile-banner::after{pointer-events:none}
+.profile-banner-edit{z-index:2;pointer-events:auto}
