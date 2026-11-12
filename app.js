@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.2';
+const EMMA_APP_VERSION = '0.8.3';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -782,6 +782,7 @@ function coinFly(amount, x, y) {
 
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
 function showScreen(id, animate = true) {
+  if (id !== 'screen-chat') document.querySelectorAll('.chat-ad-corners').forEach(node => node.remove());
   document.body.classList.toggle('chat-open', id === 'screen-chat');
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.remove('slide-up');
@@ -1208,7 +1209,7 @@ async function saveThoughtPlans() {
 function switchTab(tab) {
   state.currentTab = tab;
   qsa('.nav-btn').forEach(b => b.classList.remove('active'));
-  el('nav-' + tab).classList.add('active');
+  el('nav-' + tab)?.classList.add('active');
 
   const content = el('tab-content');
   content.innerHTML = '';
@@ -1564,35 +1565,6 @@ async function toggleCreatorFollow(userId,follow) {
   } catch(e) { toast(e.message||"Não foi possível atualizar o seguimento.","error"); }
 }
 
-function openPlayerChat(userId) {
-  // For now, treat player-characters like bots (offline response)
-  const users = DB.get('users', []);
-  const targetUser = users.find(u => u.id === userId);
-  if (!targetUser) return;
-  // Create a synthetic "character" from this player
-  const syntheticChar = {
-    id: 'player_' + targetUser.id,
-    name: targetUser.username,
-    role: 'Jogador-Personagem',
-    image: targetUser.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(targetUser.username)}`,
-    isOnline: false,
-    isBanned: false,
-    gender: targetUser.gender,
-    botPersonality: `Sou ${escapeHtml(targetUser.username)}, um jogador. Respondo de forma casual e divertida.`
-  };
-  state.currentChat = { charId: syntheticChar.id, char: syntheticChar };
-  const chats = DB.get('chats', []);
-  let chat = chats.find(c => c.userId === state.currentUser.id && c.charId === syntheticChar.id);
-  if (!chat) {
-    chat = { id: 'chat_' + Date.now(), userId: state.currentUser.id, charId: syntheticChar.id, createdAt: Date.now(), lastMessage: '', lastTime: Date.now(), unread: 0 };
-    chats.push(chat);
-    DB.set('chats', chats);
-  }
-  state.currentChat.chatId = chat.id;
-  renderChatScreen(syntheticChar, chat);
-  showScreen('screen-chat');
-}
-
 // ─── OPEN CHAT ────────────────────────────────────────────────────────────────
 async function openChat(charId, requestedChatId = null, createNew = false) {
   const char = DB.get('characters', []).find(c => c.id === charId);
@@ -1941,7 +1913,7 @@ function formatMessageContent(msg) {
   if (type === 'thought') return '<span class="thought-text">' + escapeHtml(raw.trim()) + '</span>';
 
   // Marcações podem aparecer no meio de uma fala gerada pela IA.
-  const markers = /\\*([^*\\n]+)\\*|<([^<>\\n]+)>|"([^"\\n]+)"/g;
+  const markers = /\*([^*\n]+)\*|<([^<>\n]+)>|"([^"\n]+)"/g;
   let output = '', last = 0, match;
   while ((match = markers.exec(raw)) !== null) {
     output += escapeHtml(raw.slice(last, match.index));
@@ -2326,7 +2298,7 @@ async function addMessage(msg) {
 function setMessageType(type) {
   state.messageType = type;
   qsa('.thought-btn').forEach(b => b.className = 'thought-btn');
-  el('btn-type-' + type).classList.add('active-' + type);
+  el('btn-type-' + type)?.classList.add('active-' + type);
   updateCostHints();
 }
 
@@ -2375,7 +2347,7 @@ function renderProfileTab(container) {
         <div class="profile-username">${escapeHtml(user.username)} ${user.isAdmin ? '<span class="chip chip-red">ADMIN</span>' : ''}</div>
         <div class="profile-joined">Desde ${formatDate(user.joinDate)}</div>
         <div style="display:flex;gap:6px;justify-content:center;margin-top:6px;flex-wrap:wrap">
-          <span class="chip"></span>
+          <span class="chip">${typeLabel}</span>
           <span class="chip">${genderLabel}</span>
           ${user.isAnonymous ? '<span class="chip">👤 Anônimo</span>' : ""}
           <span class="chip">🔍 ${prefLabel}</span>
@@ -2597,6 +2569,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.8.3',title:'Correções de preferências, chat e navegação',items:['O modo anônimo e a preferência de ocultar imagens agora podem ser editados sem serem apagados ao salvar outras preferências.','Ações e pensamentos digitados dentro de falas voltam a receber a formatação correta.','Anúncios flutuantes são removidos ao sair do chat, evitando que permaneçam em outras telas.','O perfil mostra corretamente o tipo de conta; a navegação e o seletor de tipo de mensagem verificam se os elementos existem.','Removido o fluxo de chat de jogador que criava conversas apenas locais e não persistidas no servidor.']},
     {version:'0.7.6',title:'Painel Admin mantém a posição ao atualizar códigos',items:['A atualização dos códigos de acesso não desloca mais a visualização para o fim da página.','A posição de rolagem do painel é preservada durante o carregamento e a exibição dos códigos.']},
     {version:'0.7.0',title:'Limite de controle configurado nas opções de qualquer usuário',items:['O limite de 0 a 50 personagens agora fica nas opções de usuários do painel Admin, independentemente do tipo da conta.','A validação do limite é aplicada a todas as contas ao atribuir ou aprovar personagens.','A edição básica continua reunida no botão de lápis.']},
     {version:'0.6.9',title:'Limite de personagens por conta e edição de usuários',items:['Admin pode definir de 0 a 50 personagens controlados para cada conta do tipo personagem.','O servidor valida o limite ao aprovar pedidos e ao atribuir ou trocar o controlador.','Opções básicas dos usuários foram reunidas no botão de lápis do painel Admin.']},
@@ -4028,6 +4001,12 @@ function showEditPreferencesModal() {
           <button type="button" class="chip-select ${user.chatPreference==='players'?'active':''}" data-val="players" onclick="selectChip(this,'pref-chatpref')">🎭 Só Players</button>
         </div>
       </div>
+      <div class="field">
+        <label><input type="checkbox" id="pref-anonymous" ${user.isAnonymous ? 'checked' : ''}> Modo anônimo</label>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="pref-hide-character-images" ${getHideCharacterImages() ? 'checked' : ''}> Ocultar imagens de personagens (fotossensibilidade)</label>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
         <button class="btn btn-primary flex-1" onclick="savePreferences(this)">Salvar</button>
@@ -4045,8 +4024,10 @@ function savePreferences(btn) {
     user.userType = getChipVal('pref-usertype', 'player');
     user.gender = getChipVal('pref-gender', 'other');
     user.chatPreference = getChipVal('pref-chatpref', 'both');
-    setHideCharacterImages(!!el('pref-hide-character-images')?.checked);
-    user.isAnonymous = !!el('pref-anonymous')?.checked;
+    const hideImagesControl = el('pref-hide-character-images');
+    if (hideImagesControl) setHideCharacterImages(hideImagesControl.checked);
+    const anonymousControl = el('pref-anonymous');
+    if (anonymousControl) user.isAnonymous = anonymousControl.checked;
     DB.set('users', users);
     state.currentUser = user;
     syncMyProfileFromAppUser(user).catch(console.warn);
