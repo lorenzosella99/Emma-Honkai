@@ -1391,3 +1391,5 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 .character-directory-tabs .chip-select{flex:1;justify-content:center}
 
 .character-creation-request-status{margin-top:10px;padding:10px;border-radius:10px;background:var(--bg-3);border:1px solid var(--border)}
+
+.chat-model-bar{display:grid;grid-template-columns:auto minmax(150px,240px);align-items:center;gap:6px 10px;padding:8px clamp(14px,4vw,52px);border-bottom:1px solid var(--border);background:var(--bg-2)}.chat-model-bar label{font-size:.78rem;color:var(--text-2);font-weight:700}.chat-model-bar select{min-width:0;padding:7px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg-3);color:var(--text-1);font:inherit;font-size:.82rem}.chat-model-bar small{grid-column:1/-1;color:var(--text-3);font-size:.72rem}.chat-model-bar.hidden{display:none}
