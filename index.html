@@ -20,7 +20,7 @@
 
 <!-- ───── TOAST CONTAINER ───── -->
 <div id="toast-container"></div>
-<button type="button" id="app-version" aria-label="Abrir histórico de atualizações" title="Ver histórico de atualizações" onclick="showAppUpdateLog()">versão: 0.6.6</button>
+<button type="button" id="app-version" aria-label="Abrir histórico de atualizações" title="Ver histórico de atualizações" onclick="showAppUpdateLog()">versão: 0.6.7</button>
 
 <!-- ───── LOADING SCREEN ───── -->
 <div id="screen-loading" class="screen flex-col items-center justify-center gap-4">
@@ -111,15 +111,19 @@
     <div class="legal-brand"><span class="legal-brand-mark">✦</span><span>Emma <b>Honkai</b></span><small>POLÍTICAS DA COMUNIDADE</small></div>
     <div class="legal-eyebrow">UMA ETAPA IMPORTANTE</div>
     <h2>Antes de continuar</h2>
-    <p class="legal-intro">Para manter sua conta ativa, leia e confirme as duas políticas do Emma Honkai. Este aceite precisa ser renovado a cada 12 meses.</p>
+    <p class="legal-intro">Para continuar, leia e confirme os três documentos oficiais do Emma Honkai. O aceite será renovado a cada 12 meses ou quando houver nova versão.</p>
     <a class="legal-link-card" href="https://lorenzosella99.github.io/Emma-Honkai-politica-de-privacidade/" target="_blank" rel="noopener">
       <span class="legal-link-icon">◈</span><span><b>Política de Privacidade</b><small>Como seus dados e conversas são tratados</small></span><span class="legal-link-arrow">↗</span>
     </a>
     <a class="legal-link-card" href="https://lorenzosella99.github.io/Emma-Honkai-politica-de-seguran-a/" target="_blank" rel="noopener">
       <span class="legal-link-icon">⌑</span><span><b>Política de Segurança</b><small>Como protegemos contas, acessos e informações</small></span><span class="legal-link-arrow">↗</span>
     </a>
+    <a class="legal-link-card" href="https://lorenzosella99.github.io/Emma-Honkai-politica-de-uso/" target="_blank" rel="noopener">
+      <span class="legal-link-icon">§</span><span><b>Termos de Uso</b><small>Deveres, convivência e regras para usar a plataforma</small></span><span class="legal-link-arrow">↗</span>
+    </a>
     <label class="legal-check"><input id="legal-privacy-check" type="checkbox"><span>Li e concordo com a <b>Política de Privacidade</b>.</span></label>
     <label class="legal-check"><input id="legal-security-check" type="checkbox"><span>Li e concordo com a <b>Política de Segurança</b>.</span></label>
+    <label class="legal-check"><input id="legal-terms-check" type="checkbox"><span>Li e concordo com os <b>Termos de Uso</b>.</span></label>
     <button class="btn btn-primary btn-full legal-continue" onclick="acceptLegalPolicies(this)">Concordar e continuar</button>
     <p class="legal-renewal">Seu aceite será válido por um ano. Depois desse prazo, o Emma solicitará uma nova confirmação antes de liberar o acesso.</p>
   </div>
