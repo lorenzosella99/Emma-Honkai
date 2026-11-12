@@ -1246,6 +1246,34 @@ function updateNavBadges() {
 }
 
 
+async function migrateLegacyProfileBanner(user){
+  if(!user?.id||!emmaSupabase)return;
+  const key='emma_profile_banner_'+user.id;
+  let legacy='';
+  try{legacy=localStorage.getItem(key)||'';}catch{return;}
+  if(!legacy)return;
+  if(user.bannerUrl){try{localStorage.removeItem(key);}catch{}return;}
+  if(!legacy.startsWith('data:image/'))return;
+  try{
+    const response=await fetch(legacy);
+    if(!response.ok)throw new Error('Não foi possível ler o banner antigo.');
+    const blob=await response.blob();
+    const path=user.id+'/banner.webp';
+    const upload=await emmaSupabase.storage.from('profile-banners').upload(path,blob,{contentType:blob.type||'image/webp',upsert:true,cacheControl:'3600'});
+    if(upload.error)throw upload.error;
+    const publicUrl=emmaSupabase.storage.from('profile-banners').getPublicUrl(path).data?.publicUrl;
+    if(!publicUrl)throw new Error('Endereço do banner não retornado.');
+    const update=await emmaSupabase.from('profiles').update({banner_url:publicUrl}).eq('id',user.id);
+    if(update.error)throw update.error;
+    user.bannerUrl=publicUrl;
+    try{localStorage.removeItem(key);}catch{}
+    const users=DB.get('users',[]),own=users.find(u=>u.id===user.id);
+    if(own)own.bannerUrl=publicUrl;
+    DB.set('users',users);
+    const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
+  }catch(error){console.warn('Migração do banner antigo:',error);}
+}
+
 function getProfileBannerStyle(userId){
   try{
     const profileUrl=state.currentUser?.id===userId?state.currentUser.bannerUrl:null;
@@ -1282,6 +1310,7 @@ async function handleProfileBannerUpload(input){
     const profileUpdate=await emmaSupabase.from('profiles').update({banner_url:publicUrl}).eq('id',user.id);
     if(profileUpdate.error)throw profileUpdate.error;
     user.bannerUrl=publicUrl;
+    try{localStorage.removeItem('emma_profile_banner_'+user.id);}catch{}
     const users=DB.get('users',[]);const own=users.find(u=>u.id===user.id);if(own)own.bannerUrl=publicUrl;DB.set('users',users);
     const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
     toast('Banner salvo na sua conta.','success');
@@ -2275,6 +2304,7 @@ function updateCostHints() {
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 function renderProfileTab(container) {
   const user = state.currentUser;
+  migrateLegacyProfileBanner(user);
   const myCharacters = DB.get('characters', []).filter(c => c.ownerUserId === user.id);
   const assignedChar = myCharacters[0] || null;
   const myCharacterChats = DB.get('chats', []).filter(c => myCharacters.some(ch => ch.id === c.charId));
