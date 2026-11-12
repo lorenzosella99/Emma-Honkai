@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.0';
+const EMMA_APP_VERSION = '0.7.1';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -817,9 +817,22 @@ function checkAndCleanBans() {
 // ─── GATE / ACCESS CODE ───────────────────────────────────────────────────────
 let gateAdminAccess = false;
 
+let gateValidationInProgress = false;
 function initGate() {
-  el('gate-submit').onclick = async () => {
-    const code = el('gate-code').value.trim().toUpperCase();
+  const submit = el('gate-submit');
+  const input = el('gate-code');
+  submit.onclick = async () => {
+    if (gateValidationInProgress) return;
+    const code = input.value.trim().toUpperCase();
+    if (!code) {
+      toast('Digite o código de acesso.', 'error');
+      input.focus();
+      return;
+    }
+    gateValidationInProgress = true;
+    submit.disabled = true;
+    const originalText = submit.textContent;
+    submit.textContent = 'Verificando…';
     try {
       await emmaAuthRequest('validate_gate', {inviteCode:code});
       gateAdminAccess = false;
@@ -827,12 +840,21 @@ function initGate() {
       DB.set('access_verified', true);
       showScreen('screen-auth'); renderAuthScreen(); initAuth();
     } catch (e) {
-      toast('Código inválido. Entre em contato com um admin no Discord.', 'error');
-      el('gate-code').classList.add('shake');
-      setTimeout(() => el('gate-code').classList.remove('shake'), 500);
+      toast(e.message || 'Código inválido ou expirado. Entre em contato com um admin no Discord.', 'error');
+      input.classList.add('shake');
+      setTimeout(() => input.classList.remove('shake'), 500);
+    } finally {
+      gateValidationInProgress = false;
+      submit.disabled = false;
+      submit.textContent = originalText || 'Entrar →';
     }
   };
-  el('gate-code').addEventListener('keypress', e => { if (e.key === 'Enter') el('gate-submit').click(); });
+  input.onkeydown = e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submit.click();
+    }
+  };
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
