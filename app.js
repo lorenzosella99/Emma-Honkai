@@ -2233,7 +2233,7 @@ function renderProfileTab(container) {
         <div class="admin-row-sub" style="margin:8px 0">Crie seu próprio personagem. Ele só será publicado depois da aprovação do administrador.</div>
         <button class="btn btn-primary btn-full" onclick="showAddCharModal()">＋ Criar personagem</button>
         <div id="my-character-creation-request" class="admin-row-sub" style="margin-top:10px">Verificando solicitações…</div>
-        <script></script>
+        
         ${myCharacters.length ? `<div class="admin-row-sub" style="margin:8px 0">Você controla ${myCharacters.length} personagem(ns).</div>
           <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
           ${myCharacters.map(ch => `<div class="admin-row" style="margin:10px 0;align-items:center"><div class="admin-row-info"><b>${escapeHtml(ch.name)}</b><div class="admin-row-sub">${myCharacterChats.filter(chat => chat.charId === ch.id).length} conversa(s) recebida(s)</div></div></div><div id="character-inbox-${escapeHtml(ch.id)}"></div>`).join('')}
@@ -2268,11 +2268,11 @@ function renderProfileTab(container) {
 
   renderOpenChats(el('open-chats-list'), chats);
   myCharacters.forEach(ch => renderCharacterInbox(el('character-inbox-' + ch.id), ch, myCharacterChats.filter(chat => chat.charId === ch.id)));
+  loadMyCharacterCreationRequest();
 }
 
 
 let discordImportDraft=null;
-  loadMyCharacterCreationRequest();
 
 function parseDiscordHistory(raw){
  const lines=String(raw||'').replace(/\r/g,'').split('\n');const out=[];let cur=null,pendingSpeaker=null;
