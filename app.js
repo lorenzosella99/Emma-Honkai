@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.3';
+const EMMA_APP_VERSION = '0.6.4';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2439,6 +2439,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.4',title:'Seletor de modelos mais compacto',items:['Barra de seleção de IA reduzida para ocupar menos espaço no chat.','Aparência refinada, melhor adaptação a telas pequenas e descrição mais discreta.']},
     {version:'0.6.3',title:'Três modelos OpenRouter por conversa',items:['Adicionadas opções Qwen 3.8 27B, Venice Uncensored e Nemotron 3 Ultra.','Qwen e Nemotron podem ser escolhidos por todos; Venice continua exclusivo do VIP.','Cada conversa salva seu modelo e o servidor tenta modelos alternativos se o selecionado falhar.']},
     {version:'0.6.2',title:'Modelo VIP gratuito e seletor de IA',items:['Assinantes VIP podem escolher entre a IA principal e Venice Uncensored gratuito pelo OpenRouter.','Se o modelo VIP estiver indisponível, o servidor tenta automaticamente a IA principal e depois o fallback configurado.','O seletor fica acima das mensagens e a escolha é salva por conversa.']},
     {version:'0.6.1',title:'Criação de personagens com aprovação administrativa',items:['Criadores podem enviar fichas de personagens para aprovação do Admin principal.','Painel Admin com fila de solicitações para aprovar ou recusar.','Limite de até 50 personagens criados por conta e auditoria das decisões.']},
