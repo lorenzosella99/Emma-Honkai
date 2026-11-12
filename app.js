@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.6';
+const EMMA_APP_VERSION = '0.7.7';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -224,7 +224,7 @@ async function syncMyProfileFromAppUser(user) {
 
 function profileToAppUser(p) {
   return {
-    id: p.id, username: p.username, role:p.role||'user', isAdmin: p.role === 'admin', isViceAdmin:p.role === 'vice_admin', adminPermissions:p.admin_permissions||{},
+    id: p.id, username: p.username, role:p.role||'user', isAdmin: p.role === 'admin', isViceAdmin:p.role === 'vice_admin', adminPermissions:p.admin_permissions||{}, bannerUrl:p.banner_url||null,
     userType: p.user_type || 'player', maxControlledCharacters:Math.max(0,Math.min(50,Number(p.max_controlled_characters??50))), gender: p.gender || 'other',
     chatPreference: p.chat_preference || 'both', avatar: p.avatar || null,
     allowBotTakeover: !!p.allow_bot_takeover, isAnonymous:!!p.is_anonymous,
@@ -1247,26 +1247,46 @@ function updateNavBadges() {
 
 
 function getProfileBannerStyle(userId){
-  try{const src=localStorage.getItem('emma_profile_banner_'+userId);return src?'background-image:linear-gradient(180deg,rgba(8,8,18,.08),rgba(8,8,18,.25)),url("'+src+'");background-size:cover;background-position:center':'';}
-  catch{return '';}
+  try{
+    const profileUrl=state.currentUser?.id===userId?state.currentUser.bannerUrl:null;
+    const legacy=localStorage.getItem('emma_profile_banner_'+userId);
+    const src=profileUrl||legacy||'';
+    const safe=profileUrl?safeImageUrl(profileUrl):(String(src).startsWith('data:image/')?src:'');
+    return safe?'background-image:linear-gradient(180deg,rgba(8,8,18,.08),rgba(8,8,18,.25)),url("'+safe+'");background-size:cover;background-position:center':'';
+  }catch{return '';}
 }
 function triggerProfileBannerUpload(){el('profile-banner-input')?.click();}
 async function handleProfileBannerUpload(input){
   const file=input?.files?.[0];if(!file)return;
   if(!file.type.startsWith('image/'))return toast('Escolha um arquivo de imagem.','error');
   if(file.size>12*1024*1024)return toast('A imagem deve ter até 12 MB.','error');
+  const user=state.currentUser;if(!user?.id||!emmaSupabase)return toast('Entre novamente para salvar o banner.','error');
+  const button=el('profile-banner')?.querySelector('.profile-banner-edit');
+  if(button){button.disabled=true;button.textContent='Salvando…';}
   try{
     const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
     const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=data;});
     const canvas=document.createElement('canvas'),scale=Math.min(1,1600/image.width,520/image.height);
     canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
-    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
-    const compact=canvas.toDataURL('image/webp',.78);
-    localStorage.setItem('emma_profile_banner_'+state.currentUser.id,compact);
-    const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(state.currentUser.id);
-    toast('Banner atualizado neste dispositivo.','success');
-  }catch(error){console.warn('Banner:',error);toast('Não foi possível atualizar o banner.','error');}
-  finally{input.value='';}
+    const context=canvas.getContext('2d');if(!context)throw new Error('Não foi possível processar a imagem.');
+    context.drawImage(image,0,0,canvas.width,canvas.height);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.78));
+    if(!blob)throw new Error('Não foi possível compactar a imagem.');
+    if(blob.size>6*1024*1024)throw new Error('A imagem compactada excede 6 MB.');
+    const path=user.id+'/banner.webp';
+    const upload=await emmaSupabase.storage.from('profile-banners').upload(path,blob,{contentType:'image/webp',upsert:true,cacheControl:'3600'});
+    if(upload.error)throw upload.error;
+    const publicData=emmaSupabase.storage.from('profile-banners').getPublicUrl(path).data;
+    const publicUrl=publicData?.publicUrl;
+    if(!publicUrl)throw new Error('O armazenamento não retornou o endereço da imagem.');
+    const profileUpdate=await emmaSupabase.from('profiles').update({banner_url:publicUrl}).eq('id',user.id);
+    if(profileUpdate.error)throw profileUpdate.error;
+    user.bannerUrl=publicUrl;
+    const users=DB.get('users',[]);const own=users.find(u=>u.id===user.id);if(own)own.bannerUrl=publicUrl;DB.set('users',users);
+    const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
+    toast('Banner salvo na sua conta.','success');
+  }catch(error){console.warn('Banner:',error);toast('Não foi possível salvar o banner: '+(error.message||'erro desconhecido'),'error',6000);}
+  finally{if(button){button.disabled=false;button.textContent='📷 Alterar banner';}input.value='';}
 }
 function setCharacterDirectoryTab(tab){
   state.characterDirectoryTab=tab==='creators'?'creators':'characters';
@@ -1736,7 +1756,9 @@ function renderChatScreen(char, chat) {
     : (char.image && (!char.isPhotosensitive || !getHideCharacterImages()) ? char.image : '');
   if (chatScreen) {
     chatScreen.classList.toggle('photosensitive-chat', showSensitiveBackdrop);
-    chatScreen.style.setProperty('--chat-character-bg', backgroundImage ? `url("${safeImageUrl(backgroundImage)}")` : 'none');
+    const chatBackgroundValue = backgroundImage ? 'url("' + safeImageUrl(backgroundImage) + '")' : 'none';
+    chatScreen.style.setProperty('--chat-character-bg', chatBackgroundValue);
+    el('chat-messages')?.style.setProperty('--chat-character-bg', chatBackgroundValue);
   }
 
   updateCostHints();
