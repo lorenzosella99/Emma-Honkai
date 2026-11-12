@@ -2939,8 +2939,8 @@ function showAdminUserEditModal(userId) {
   const owned=DB.get('characters',[]).filter(c=>c.ownerUserId===userId).length;
   const overlay=document.createElement('div'); overlay.className='modal-overlay';
   overlay.innerHTML=`<div class="modal-sheet"><div class="modal-handle"></div><div class="modal-title">✏️ Editar usuário · ${escapeHtml(user.username)}</div>
-    <div class="field"><label>Limite de personagens controlados (0 a 50)</label><input class="input" id="admin-user-character-limit" type="number" min="0" max="50" step="1" value="${Math.max(0,Math.min(50,Number(user.maxControlledCharacters??50)))}" ${state.currentUser?.isAdmin?'':'disabled'}><div class="admin-row-sub">Atualmente controla ${owned} personagem(ns). O limite vale para novas aprovações.</div></div>
-    <div class="modal-actions"><button class="btn btn-secondary flex-1" data-close>Fechar</button><button class="btn btn-primary flex-1" data-save ${state.currentUser?.isAdmin?'':'disabled'}>Salvar limite</button></div>
+    ${user.userType==='character'?'<div class="field"><label>Limite de personagens controlados (0 a 50)</label><input class="input" id="admin-user-character-limit" type="number" min="0" max="50" step="1" value="'+Math.max(0,Math.min(50,Number(user.maxControlledCharacters??50)))+'" '+(state.currentUser?.isAdmin?'':'disabled')+'><div class="admin-row-sub">Atualmente controla '+owned+' personagem(ns). O limite vale para novas atribuições e aprovações.</div></div>':'<div class="admin-row-sub">O limite de personagens é exibido somente para contas do tipo personagem.</div>'}
+    <div class="modal-actions"><button class="btn btn-secondary flex-1" data-close>Fechar</button>${user.userType==='character'&&state.currentUser?.isAdmin?'<button class="btn btn-primary flex-1" data-save>Salvar limite</button>':''}</div>
     <div class="divider"></div><div class="modal-title">Opções básicas</div>
     <div class="admin-actions" style="justify-content:flex-start">
       <button class="btn btn-xs btn-secondary" data-action="password">🔑 Redefinir senha</button>
@@ -2951,13 +2951,13 @@ function showAdminUserEditModal(userId) {
     </div></div>`;
   document.body.appendChild(overlay);
   const close=()=>overlay.remove(); overlay.querySelector('[data-close]').onclick=close;
-  overlay.querySelector('[data-save]').onclick=async()=>{
+  overlay.querySelector('[data-save]')?.addEventListener('click',async()=>{
     const value=Number(overlay.querySelector('#admin-user-character-limit').value);
     if(!Number.isInteger(value)||value<0||value>50)return toast('Informe um limite inteiro entre 0 e 50.','error');
     const save=overlay.querySelector('[data-save]');save.disabled=true;
     try{await emmaApi('admin_update_user',{userId,maxControlledCharacters:value});await loadEmmaBackendState();toast('Limite de personagens atualizado.','success');close();renderAdminPanel();}
     catch(e){toast(e.message||'Não foi possível salvar.','error');save.disabled=false;}
-  };
+  });
   overlay.querySelector('[data-action="password"]')?.addEventListener('click',()=>{close();adminResetPassword(userId);});
   overlay.querySelector('[data-action="coins"]')?.addEventListener('click',()=>{close();adminAddCoins(userId);});
   overlay.querySelector('[data-action="renew"]')?.addEventListener('click',()=>{close();adminSetSubscriptionBan(userId,!user.subscriptionRenewalBanned);});
