@@ -1500,3 +1500,19 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 #tab-content .chat-item{padding:10px 12px;border-radius:13px}
 #tab-content .chat-avatar{width:44px;height:44px}
 @media(max-width:560px){.owner-chat-card{align-items:flex-start;flex-wrap:wrap}.owner-chat-card-actions{width:100%;justify-content:flex-end}.owner-chat-card-actions .btn{flex:1}}
+
+/* Ajustes de hierarquia visual da tela principal */
+#screen-main #tab-content>.app-header{padding-inline:clamp(16px,3vw,30px)}
+#screen-main #tab-content .section-title{padding:18px 18px 9px;letter-spacing:.07em;font-size:.72rem}
+#screen-main #tab-content .chars-grid{gap:10px;padding-inline:clamp(14px,2.5vw,24px)}
+#screen-main #tab-content .char-card{border-radius:14px;box-shadow:0 3px 12px #00000012}
+#screen-main #tab-content .chat-list{padding-inline:clamp(14px,2.5vw,24px)}
+#screen-main #tab-content .chat-item{border-radius:13px}
+#screen-main #tab-content .main-content{padding-bottom:calc(var(--nav-h) + 14px)}
+@media(min-width:900px){
+ #screen-main #tab-content>.app-header,
+ #screen-main #tab-content>.section-title,
+ #screen-main #tab-content>.chars-grid,
+ #screen-main #tab-content>.chat-list{max-width:1120px;margin-left:auto;margin-right:auto}
+ #screen-main #tab-content>.chars-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+}
