@@ -200,6 +200,7 @@ async function emmaApi(action, payload = {}) {
     await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
   }
   if (error) {
+    if(action!=='client_error_log')logEmmaSilentError('api_error',error.message||'Falha na API',{action,status:error.status||0,code:error.code||''});
     let message = data?.error || '';
     if (!message && error.context && typeof error.context.clone === 'function') {
       try {
@@ -209,7 +210,7 @@ async function emmaApi(action, payload = {}) {
     }
     throw new Error(message || error.message || 'Erro no servidor.');
   }
-  if (data?.error) throw new Error(data.error);
+  if (data?.error) { if(action!=='client_error_log')logEmmaSilentError('api_response_error',data.error,{action}); throw new Error(data.error); }
   return data;
 }
 
@@ -1285,35 +1286,35 @@ function getProfileBannerStyle(userId){
 }
 function triggerProfileBannerUpload(){el('profile-banner-input')?.click();}
 async function handleProfileBannerUpload(input){
-  const file=input?.files?.[0];if(!file)return;
-  if(!file.type.startsWith('image/'))return toast('Escolha um arquivo de imagem.','error');
-  if(file.size>12*1024*1024)return toast('A imagem deve ter até 12 MB.','error');
-  const user=state.currentUser;if(!user?.id||!emmaSupabase)return toast('Entre novamente para salvar o banner.','error');
-  const button=el('profile-banner')?.querySelector('.profile-banner-edit');
-  if(button){button.disabled=true;button.textContent='Salvando…';}
-  try{
-    const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
-    const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=data;});
-    const canvas=document.createElement('canvas'),scale=Math.min(1,1600/image.width,520/image.height);
-    canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
-    const context=canvas.getContext('2d');if(!context)throw new Error('Não foi possível processar a imagem.');
-    context.drawImage(image,0,0,canvas.width,canvas.height);
-    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.78));
-    if(!blob)throw new Error('Não foi possível compactar a imagem.');
-    if(blob.size>6*1024*1024)throw new Error('A imagem compactada excede 6 MB.');
-    const bannerData=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(new Error('Não foi possível preparar o banner.'));reader.readAsDataURL(blob);});
-    if(!bannerData.startsWith('data:image/webp;base64,'))throw new Error('A imagem WebP não foi preparada corretamente.');
-    const saved=await emmaApi('profile_save_banner',{imageData:bannerData});
-    const publicUrl=saved.bannerUrl;
-    if(!publicUrl)throw new Error('O servidor não retornou o endereço do banner.');
-    user.bannerUrl=publicUrl;
-    try{localStorage.removeItem('emma_profile_banner_'+user.id);}catch{}
-    const users=DB.get('users',[]);const own=users.find(u=>u.id===user.id);if(own)own.bannerUrl=publicUrl;DB.set('users',users);
-    const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
-    toast('Banner salvo na sua conta.','success');
-  }catch(error){console.warn('Banner:',error);toast('Não foi possível salvar o banner: '+(error.message||'erro desconhecido'),'error',6000);}
-  finally{if(button){button.disabled=false;button.textContent='📷 Alterar banner';}input.value='';}
+ const file=input?.files?.[0];if(!file)return;
+ if(!file.type.startsWith('image/'))return toast('Escolha um arquivo de imagem.','error');
+ if(file.size>12*1024*1024)return toast('A imagem deve ter até 12 MB.','error');
+ if(!state.currentUser?.id||!emmaSupabase)return toast('Entre novamente para salvar o banner.','error');
+ openBannerCropper(file);input.value='';
 }
+let emmaBannerCropState=null;
+function openBannerCropper(file){
+ const reader=new FileReader();reader.onload=()=>{const image=new Image();image.onload=()=>{
+ emmaBannerCropState={image,zoom:1,x:50,y:50};let modal=document.getElementById('emma-banner-crop-modal');
+ if(!modal){modal=document.createElement('div');modal.id='emma-banner-crop-modal';modal.className='emma-modal-overlay';document.body.appendChild(modal);}
+ modal.innerHTML=`<div class="emma-banner-crop-dialog"><div class="admin-section-header">Ajustar banner</div><div class="emma-banner-crop-preview"><img id="emma-banner-crop-preview" alt="Prévia"></div><label>Zoom <input type="range" min="1" max="3" step=".05" value="1" oninput="updateBannerCrop('zoom',this.value)"></label><label>Horizontal <input type="range" min="0" max="100" value="50" oninput="updateBannerCrop('x',this.value)"></label><label>Vertical <input type="range" min="0" max="100" value="50" oninput="updateBannerCrop('y',this.value)"></label><div class="emma-banner-crop-actions"><button class="btn btn-secondary" onclick="closeBannerCropper()">Cancelar</button><button class="btn btn-primary" id="emma-banner-save-btn" onclick="saveBannerCrop()">Salvar banner</button></div></div>`;
+ const preview=document.getElementById('emma-banner-crop-preview');preview.src=image.src;updateBannerCropPreview();
+ };image.onerror=()=>{logEmmaSilentError('banner_decode','Não foi possível abrir a imagem.');toast('Não foi possível abrir esta imagem.','error');};image.src=String(reader.result||'');};reader.onerror=()=>{logEmmaSilentError('banner_read','Falha ao ler o arquivo.');toast('Não foi possível ler a imagem.','error');};reader.readAsDataURL(file);
+}
+function updateBannerCrop(key,value){if(!emmaBannerCropState)return;emmaBannerCropState[key]=Number(value);updateBannerCropPreview();}
+function updateBannerCropPreview(){const st=emmaBannerCropState,img=document.getElementById('emma-banner-crop-preview');if(!st||!img)return;const scale=Math.max(320/img.naturalWidth,104/img.naturalHeight)*st.zoom,w=img.naturalWidth*scale,h=img.naturalHeight*scale;img.style.width=w+'px';img.style.height=h+'px';img.style.left=-Math.max(0,w-320)*st.x/100+'px';img.style.top=-Math.max(0,h-104)*st.y/100+'px';}
+function closeBannerCropper(){document.getElementById('emma-banner-crop-modal')?.remove();emmaBannerCropState=null;}
+async function saveBannerCrop(){
+ const st=emmaBannerCropState,user=state.currentUser;if(!st||!user?.id)return;const btn=el('emma-banner-save-btn');if(btn){btn.disabled=true;btn.textContent='Salvando…';}
+ try{const image=st.image,aspect=1600/520,baseW=Math.min(image.width,image.height*aspect),cw=baseW/st.zoom,ch=cw/aspect,sx=(image.width-cw)*st.x/100,sy=(image.height-ch)*st.y/100,canvas=document.createElement('canvas');canvas.width=1600;canvas.height=520;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Não foi possível processar o recorte.');ctx.drawImage(image,sx,sy,cw,ch,0,0,1600,520);const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.82));if(!blob||blob.size>6*1024*1024)throw new Error('Não foi possível preparar o banner.');const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=reject;r.readAsDataURL(blob);});const saved=await emmaApi('profile_save_banner',{imageData:data});if(!saved?.verified||!saved.bannerUrl)throw new Error('O servidor não confirmou a gravação do banner.');user.bannerUrl=saved.bannerUrl;const users=DB.get('users',[]),own=users.find(u=>u.id===user.id);if(own)own.bannerUrl=saved.bannerUrl;DB.set('users',users);try{localStorage.removeItem('emma_profile_banner_'+user.id);}catch{}closeBannerCropper();if(state.currentTab==='profile')switchTab('profile');toast('Banner salvo e confirmado no servidor.','success');
+ }catch(error){logEmmaSilentError('banner_save',error?.message||String(error));toast('Não foi possível confirmar o banner: '+(error.message||'erro desconhecido'),'error',6500);if(btn){btn.disabled=false;btn.textContent='Tentar salvar novamente';}}
+}
+function logEmmaSilentError(type,message,details={}){
+ try{const key='emma_error_log_last',now=Date.now(),fingerprint=String(type)+'|'+String(message).slice(0,160),previous=JSON.parse(sessionStorage.getItem(key)||'{}');if(previous.fingerprint===fingerprint&&now-Number(previous.at||0)<60000)return;sessionStorage.setItem(key,JSON.stringify({fingerprint,at:now}));if(!state.currentUser?.id||!emmaSupabase)return;emmaApi('client_error_log',{errorType:type,message:String(message||'Erro desconhecido'),location:location.pathname,details}).catch(()=>{});}catch(_){}
+}
+window.addEventListener('error',event=>logEmmaSilentError('window_error',event.message||'Erro JavaScript'));
+window.addEventListener('unhandledrejection',event=>logEmmaSilentError('unhandled_rejection',event.reason?.message||String(event.reason||'Promise rejeitada')));
+
 function setCharacterDirectoryTab(tab){
   state.characterDirectoryTab=tab==='creators'?'creators':'characters';
   const content=el('tab-content');
@@ -3275,6 +3276,9 @@ async function loadMyCharacterCreationRequest(){
   }catch(e){target.textContent='';}
 }
 
+async function loadAdminErrorLogs(){const out=el('admin-error-output');if(!out)return;out.innerHTML='<div class="admin-row-sub">Carregando…</div>';try{const data=await emmaApi('admin_error_logs'),logs=data.logs||[];out.innerHTML=logs.length?logs.map(log=>'<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>'+escapeHtml(log.error_type)+' · '+(log.resolved?'Resolvido':'Pendente')+'</b><div class="admin-row-sub">'+escapeHtml(log.message)+'</div><div class="admin-row-sub">'+formatDate(Date.parse(log.created_at))+' · '+escapeHtml(log.source)+' · '+escapeHtml(log.location||'')+'</div></div>'+(log.resolved?'':'<button class="btn btn-secondary btn-sm" onclick="resolveAdminError('+log.id+')">Resolver</button>')+'</div>').join(''):'<div class="admin-row-sub">Nenhum erro registrado.</div>';}catch(e){out.textContent=e.message||'Falha ao carregar.';}}
+async function resolveAdminError(id){try{await emmaApi('admin_resolve_error',{id});loadAdminErrorLogs();}catch(e){toast(e.message||'Falha ao atualizar.','error');}}
+
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
@@ -3306,6 +3310,7 @@ function renderAdminPanel() {
     <div class="admin-section"><div class="admin-section-header">🚨 Denúncias pendentes (${pendingReports.length})</div>
       ${pendingReports.map(r => { const reporter=users.find(u=>u.id===r.reporterId), target=users.find(u=>u.id===r.reportedUserId), c=chars.find(x=>x.id===r.characterId); return `<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>${escapeHtml(target?.username || 'Usuário removido')}</b><div class="admin-row-sub">Denunciado por ${escapeHtml(reporter?.username || 'Personagem')} em ${escapeHtml(c?.name || 'personagem')}</div><div class="admin-row-sub">${escapeHtml(r.reason)}</div></div><button class="btn btn-secondary btn-sm" onclick="adminResolveReport('${r.id}','reviewed')">Analisada</button></div>`; }).join('') || '<div class="admin-row-sub">Nenhuma denúncia pendente.</div>'}
     </div>
+    ${state.currentUser?.isAdmin ? '<div class="admin-section"><div class="admin-section-header">🧯 Erros silenciosos do sistema</div><div class="admin-row-sub">Falhas capturadas automaticamente; sem conteúdo de conversas ou credenciais.</div><button class="btn btn-secondary btn-sm" onclick="loadAdminErrorLogs()">Consultar últimos 100 erros</button><div id="admin-error-output"></div></div>' : ''}
     <div class="admin-section">
       <div class="admin-section-header">📜 Registros administrativos</div>
       <button class="btn btn-secondary btn-sm" onclick="loadAdminAuditLogs()">Carregar registros recentes</button>
