@@ -1443,7 +1443,8 @@ function renderPlayerGrid(container, players) {
     container.innerHTML='<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum criador nesta categoria</div>';
     return;
   }
-  container.innerHTML=visible.map(g=>'<section class="creator-compact-group"><div class="creator-compact-name">'+escapeHtml(g.name)+'</div><div class="creator-compact-characters">'+g.characters.map(c=>'<button type="button" class="creator-compact-character" onclick="openChat(\\''+String(c.id).replace(/['"\\\\]/g,'')+'\\')">'+escapeHtml(c.name||'Personagem')+'</button>').join('')+'</div></section>').join('');
+  container.innerHTML=visible.map(g=>'<section class="creator-compact-group"><div class="creator-compact-name">'+escapeHtml(g.name)+'</div><div class="creator-compact-characters">'+g.characters.map(c=>'<button type="button" class="creator-compact-character" data-character-id="'+escapeHtml(String(c.id))+'">'+escapeHtml(c.name||'Personagem')+'</button>').join('')+'</div></section>').join('');
+  container.querySelectorAll('[data-character-id]').forEach(button=>button.addEventListener('click',()=>openChat(button.dataset.characterId)));
 }
 async function toggleCreatorFollow(userId,follow) {
   try {
