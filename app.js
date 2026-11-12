@@ -2432,6 +2432,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.2',title:'Modelo VIP gratuito e seletor de IA',items:['Assinantes VIP podem escolher entre a IA principal e Venice Uncensored gratuito pelo OpenRouter.','Se o modelo VIP estiver indisponível, o servidor tenta automaticamente a IA principal e depois o fallback configurado.','O seletor fica acima das mensagens e a escolha é salva por conversa.']},
     {version:'0.6.1',title:'Criação de personagens com aprovação administrativa',items:['Criadores podem enviar fichas de personagens para aprovação do Admin principal.','Painel Admin com fila de solicitações para aprovar ou recusar.','Limite de até 50 personagens criados por conta e auditoria das decisões.']},
     {version:'0.6.0',title:'Banners de perfil e comunidade de criadores',items:['Personalização do banner de perfil.','Nova área para descobrir personagens criados pela comunidade.']},
     {version:'0.5.45',title:'Todos os códigos na aba Admin',items:['A aba Admin agora mostra os códigos de usuário, Vice-admin e Admin.','Cada código tem botão para copiar e exibe sua validade.','Os códigos continuam visíveis somente para o Admin principal.']},
