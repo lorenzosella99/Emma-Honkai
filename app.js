@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.7';
+const EMMA_APP_VERSION = '0.6.8';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -924,6 +924,18 @@ function renderAuthScreen() {
           <button type="button" class="chip-select" data-val="male" onclick="selectChip(this,'auth-chatpref')">♂ Homens</button>
         </div>
       </div>
+      <div class="field auth-legal-register" style="margin-top:10px;padding:13px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)">
+        <strong style="display:block;margin-bottom:8px">Documentos obrigatórios</strong>
+        <div style="font-size:.78rem;line-height:1.6;color:var(--text-2);margin-bottom:9px">Leia os documentos antes de criar sua conta:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;font-size:.78rem">
+          <a href="https://lorenzosella99.github.io/Emma-Honkai-politica-de-privacidade/" target="_blank" rel="noopener">Política de Privacidade ↗</a>
+          <a href="https://lorenzosella99.github.io/Emma-Honkai-politica-de-seguran-a/" target="_blank" rel="noopener">Política de Segurança ↗</a>
+          <a href="https://lorenzosella99.github.io/Emma-Honkai-politica-de-uso/" target="_blank" rel="noopener">Termos de Uso ↗</a>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:9px;margin:8px 0;font-size:.8rem;line-height:1.45"><input type="checkbox" id="register-privacy-check" style="margin-top:3px;flex-shrink:0"> <span>Li e concordo com a Política de Privacidade.</span></label>
+        <label style="display:flex;align-items:flex-start;gap:9px;margin:8px 0;font-size:.8rem;line-height:1.45"><input type="checkbox" id="register-security-check" style="margin-top:3px;flex-shrink:0"> <span>Li e concordo com a Política de Segurança.</span></label>
+        <label style="display:flex;align-items:flex-start;gap:9px;margin:8px 0;font-size:.8rem;line-height:1.45"><input type="checkbox" id="register-terms-check" style="margin-top:3px;flex-shrink:0"> <span>Li e concordo com os Termos de Uso.</span></label>
+      </div>
     `;
   } else if (authMode === 'recovery') {
     el('auth-fields-register').classList.remove('hidden');
@@ -970,9 +982,15 @@ function initAuth() {
     const username = el('auth-username').value.trim().toLowerCase();
     const password = el('auth-password').value;
     if (!username || !password) return toast('Preencha todos os campos.', 'error');
-    if (authMode === 'register') {
+    const isNewRegistration = authMode === 'register';
+    const registrationLegalAccepted = isNewRegistration &&
+      el('register-privacy-check')?.checked === true &&
+      el('register-security-check')?.checked === true &&
+      el('register-terms-check')?.checked === true;
+    if (isNewRegistration) {
       const strength = evaluatePasswordStrength(password, username);
       if (password.length < 12 || strength.score < 3) return toast('Sua senha está ' + strength.label.toLowerCase() + '. Use pelo menos 12 caracteres e mais variedade.', 'error', 6000);
+      if (!registrationLegalAccepted) return toast('Para criar a conta, leia e aceite os três documentos.', 'error', 6000);
     }
     const submit = el('auth-submit'); submit.disabled = true;
     try {
@@ -993,7 +1011,15 @@ function initAuth() {
       state.currentUser = user; DB.set('current_user', user.id);
       await loadEmmaBackendState();
       subscribeEmmaRealtime();
-      if (authMode === 'register') toast('Conta criada! Agora seus dados ficam sincronizados.', 'success', 3500);
+      if (isNewRegistration && registrationLegalAccepted) {
+        try {
+          await emmaLegalRequest('accept', {privacyAccepted:true,securityAccepted:true,termsAccepted:true});
+        } catch (legalError) {
+          console.warn('Registro do aceite legal após cadastro:', legalError);
+          toast('Conta criada, mas precisamos registrar seu aceite antes de liberar o acesso.', 'warning', 5000);
+        }
+      }
+      if (isNewRegistration) toast('Conta criada! Seus dados e aceites foram registrados.', 'success', 3500);
       await continueAfterAuthentication();
     } catch (e) {
       toast(e.message || 'Não foi possível entrar.', 'error');
@@ -2450,6 +2476,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.8',title:'Aceite dos documentos durante o cadastro',items:['Novas contas precisam marcar os três aceites antes de enviar o cadastro.','Links para Política de Privacidade, Política de Segurança e Termos de Uso disponíveis na tela de cadastro.','O aceite é registrado no servidor após a autenticação e antes de liberar o acesso.']},
     {version:'0.6.7',title:'Termos de Uso e aceite dos três documentos',items:['Publicados os Termos de Uso com deveres básicos, regras de convivência e usos proibidos.','O aceite agora exige Política de Privacidade, Política de Segurança e Termos de Uso.','O servidor registra a versão dos três documentos e solicita novo aceite para todas as contas existentes.']},
     {version:'0.6.6',title:'Criadores em lista vertical',items:['Cada usuário ocupa uma linha inteira, com seus personagens logo abaixo.','O próximo usuário aparece somente depois da lista de personagens do anterior.']},
     {version:'0.6.5',title:'Lista compacta na aba Criadores',items:['Criadores organizados pelo nome, com os personagens exibidos em tamanho reduzido logo abaixo.','Layout compacto aplicado somente à aba Criadores.']},
