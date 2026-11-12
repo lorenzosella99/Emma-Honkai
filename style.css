@@ -1474,3 +1474,29 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 
 /* Evita que a inserção dos códigos altere a âncora de rolagem do painel Admin. */
 #admin-access-codes-output{overflow-anchor:none;}
+
+/* Emma Honkai 0.8.1 — interface de chat e listas mais limpas */
+#screen-chat{min-height:0;overflow:hidden}
+#screen-chat .chat-messages{min-height:0;padding:18px clamp(12px,3vw,34px);background:linear-gradient(180deg,#10111a,#0b0c13)}
+#screen-chat .chat-messages::before{display:none}
+#screen-chat .msg-bubble{box-shadow:0 2px 8px #0002}
+#screen-chat .chat-format-hint{padding:7px 14px 3px;background:#0d0e16;color:var(--text-3);font-size:.7rem;line-height:1.4}
+#screen-chat .thought-cost-hint{padding:4px 14px 7px;background:#0d0e16;gap:7px}
+#screen-chat .chat-private-controls{padding:3px 14px 7px!important;background:#0d0e16}
+#screen-chat .chat-private-controls .btn{border-radius:999px;font-size:.72rem}
+#screen-chat .chat-input-bar{padding:9px 14px calc(9px + env(safe-area-inset-bottom));background:#0b0c13;border-top:1px solid #ffffff12}
+#screen-chat .chat-header{padding:9px 14px;background:#10111a}
+#screen-chat .chat-ad-corners{display:none!important}
+.owner-chat-card{display:flex;align-items:center;gap:12px;padding:12px 14px;margin:7px 0;border:1px solid var(--border);border-radius:13px;background:var(--bg-2)}
+.owner-chat-card-main{flex:1;min-width:0}
+.owner-chat-card-title{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:750}
+.owner-chat-card-preview{margin-top:4px;color:var(--text-2);font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.owner-chat-card-main time{display:block;margin-top:4px;color:var(--text-3);font-size:.66rem}
+.owner-chat-card-actions{display:flex;gap:6px;flex-shrink:0}
+.owner-chat-card-actions .btn{padding:7px 10px;font-size:.7rem}
+.owner-chat-empty{padding:16px;border:1px dashed var(--border);border-radius:12px;color:var(--text-3);font-size:.8rem;text-align:center}
+#tab-content .section-title{margin:18px 16px 9px;font-size:.86rem;letter-spacing:.01em}
+#tab-content .chat-list{gap:7px;padding:0 14px 14px}
+#tab-content .chat-item{padding:10px 12px;border-radius:13px}
+#tab-content .chat-avatar{width:44px;height:44px}
+@media(max-width:560px){.owner-chat-card{align-items:flex-start;flex-wrap:wrap}.owner-chat-card-actions{width:100%;justify-content:flex-end}.owner-chat-card-actions .btn{flex:1}}
