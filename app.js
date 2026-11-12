@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.6';
+const EMMA_APP_VERSION = '0.6.7';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -172,11 +172,12 @@ async function continueAfterAuthentication() {
 async function acceptLegalPolicies(button) {
   const privacy = el('legal-privacy-check')?.checked === true;
   const security = el('legal-security-check')?.checked === true;
-  if (!privacy || !security) return toast('Marque as duas opções para continuar.', 'error');
+  const terms = el('legal-terms-check')?.checked === true;
+  if (!privacy || !security || !terms) return toast('Marque as três opções para continuar.', 'error');
   button.disabled = true; button.textContent = 'Registrando aceite…';
   try {
-    await emmaLegalRequest('accept', {privacyAccepted:privacy,securityAccepted:security});
-    toast('Políticas aceitas. Seu aceite será renovado em um ano.', 'success');
+    await emmaLegalRequest('accept', {privacyAccepted:privacy,securityAccepted:security,termsAccepted:terms});
+    toast('Os três documentos foram aceitos. Seu aceite será renovado em um ano.', 'success');
     await startApp();
   } catch (e) {
     toast(e.message || 'Não foi possível registrar o aceite.', 'error');
@@ -2449,6 +2450,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.7',title:'Termos de Uso e aceite dos três documentos',items:['Publicados os Termos de Uso com deveres básicos, regras de convivência e usos proibidos.','O aceite agora exige Política de Privacidade, Política de Segurança e Termos de Uso.','O servidor registra a versão dos três documentos e solicita novo aceite para todas as contas existentes.']},
     {version:'0.6.6',title:'Criadores em lista vertical',items:['Cada usuário ocupa uma linha inteira, com seus personagens logo abaixo.','O próximo usuário aparece somente depois da lista de personagens do anterior.']},
     {version:'0.6.5',title:'Lista compacta na aba Criadores',items:['Criadores organizados pelo nome, com os personagens exibidos em tamanho reduzido logo abaixo.','Layout compacto aplicado somente à aba Criadores.']},
     {version:'0.6.4',title:'Seletor de modelos mais compacto',items:['Barra de seleção de IA reduzida para ocupar menos espaço no chat.','Aparência refinada, melhor adaptação a telas pequenas e descrição mais discreta.']},
