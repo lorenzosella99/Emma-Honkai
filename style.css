@@ -1455,3 +1455,10 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
  .chat-model-bar select{flex-basis:175px;font-size:.69rem}
  .chat-model-bar small{font-size:.62rem}
 }
+
+/* Aba Criadores: agrupamento compacto, sem afetar os cartões das outras abas */
+#chars-grid-players .creator-compact-group{min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:11px;background:rgba(255,255,255,.025)}
+#chars-grid-players .creator-compact-name{color:var(--text-1);font-size:.88rem;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+#chars-grid-players .creator-compact-characters{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+#chars-grid-players .creator-compact-character{max-width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg-2);color:var(--text-2);font:500 .7rem var(--font);cursor:pointer;overflow-wrap:anywhere}
+#chars-grid-players .creator-compact-character:active{background:var(--surface-2)}
