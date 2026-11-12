@@ -1470,3 +1470,7 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 /* Corrige a camada decorativa do banner que podia bloquear o botão de edição */
 .profile-banner::after{pointer-events:none}
 .profile-banner-edit{z-index:2;pointer-events:auto}
+
+
+/* Evita que a inserção dos códigos altere a âncora de rolagem do painel Admin. */
+#admin-access-codes-output{overflow-anchor:none;}
