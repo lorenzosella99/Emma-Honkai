@@ -1389,3 +1389,5 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 .profile-banner-edit{position:absolute;right:14px;bottom:12px;border:1px solid #ffffff55;border-radius:999px;padding:8px 12px;background:#111827bb;color:#fff;font-size:.75rem;font-weight:700;cursor:pointer;backdrop-filter:blur(8px)}
 .character-directory-tabs{display:flex;gap:8px;padding:8px 16px 12px}
 .character-directory-tabs .chip-select{flex:1;justify-content:center}
+
+.character-creation-request-status{margin-top:10px;padding:10px;border-radius:10px;background:var(--bg-3);border:1px solid var(--border)}
