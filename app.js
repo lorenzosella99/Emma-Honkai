@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.9';
+const EMMA_APP_VERSION = '0.7.0';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2476,6 +2476,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.7.0',title:'Limite de controle configurado nas opções de qualquer usuário',items:['O limite de 0 a 50 personagens agora fica nas opções de usuários do painel Admin, independentemente do tipo da conta.','A validação do limite é aplicada a todas as contas ao atribuir ou aprovar personagens.','A edição básica continua reunida no botão de lápis.']},
     {version:'0.6.9',title:'Limite de personagens por conta e edição de usuários',items:['Admin pode definir de 0 a 50 personagens controlados para cada conta do tipo personagem.','O servidor valida o limite ao aprovar pedidos e ao atribuir ou trocar o controlador.','Opções básicas dos usuários foram reunidas no botão de lápis do painel Admin.']},
     {version:'0.6.8',title:'Aceite dos documentos durante o cadastro',items:['Novas contas precisam marcar os três aceites antes de enviar o cadastro.','Links para Política de Privacidade, Política de Segurança e Termos de Uso disponíveis na tela de cadastro.','O aceite é registrado no servidor após a autenticação e antes de liberar o acesso.']},
     {version:'0.6.7',title:'Termos de Uso e aceite dos três documentos',items:['Publicados os Termos de Uso com deveres básicos, regras de convivência e usos proibidos.','O aceite agora exige Política de Privacidade, Política de Segurança e Termos de Uso.','O servidor registra a versão dos três documentos e solicita novo aceite para todas as contas existentes.']},
@@ -2940,8 +2941,8 @@ function showAdminUserEditModal(userId) {
   const owned=DB.get('characters',[]).filter(c=>c.ownerUserId===userId).length;
   const overlay=document.createElement('div'); overlay.className='modal-overlay';
   overlay.innerHTML=`<div class="modal-sheet"><div class="modal-handle"></div><div class="modal-title">✏️ Editar usuário · ${escapeHtml(user.username)}</div>
-    ${user.userType==='character'?'<div class="field"><label>Limite de personagens controlados (0 a 50)</label><input class="input" id="admin-user-character-limit" type="number" min="0" max="50" step="1" value="'+Math.max(0,Math.min(50,Number(user.maxControlledCharacters??50)))+'" '+(state.currentUser?.isAdmin?'':'disabled')+'><div class="admin-row-sub">Atualmente controla '+owned+' personagem(ns). O limite vale para novas atribuições e aprovações.</div></div>':'<div class="admin-row-sub">O limite de personagens é exibido somente para contas do tipo personagem.</div>'}
-    <div class="modal-actions"><button class="btn btn-secondary flex-1" data-close>Fechar</button>${user.userType==='character'&&state.currentUser?.isAdmin?'<button class="btn btn-primary flex-1" data-save>Salvar limite</button>':''}</div>
+    ${'<div class="field"><label>Limite de personagens controlados (0 a 50)</label><input class="input" id="admin-user-character-limit" type="number" min="0" max="50" step="1" value="'+Math.max(0,Math.min(50,Number(user.maxControlledCharacters??50)))+'" '+(state.currentUser?.isAdmin?'':'disabled')+'><div class="admin-row-sub">Atualmente controla '+owned+' personagem(ns). O limite vale para novas atribuições e aprovações.</div></div>'}
+    <div class="modal-actions"><button class="btn btn-secondary flex-1" data-close>Fechar</button>${state.currentUser?.isAdmin?'<button class="btn btn-primary flex-1" data-save>Salvar limite</button>':''}</div>
     <div class="divider"></div><div class="modal-title">Opções básicas</div>
     <div class="admin-actions" style="justify-content:flex-start">
       <button class="btn btn-xs btn-secondary" data-action="password">🔑 Redefinir senha</button>
