@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.8';
+const EMMA_APP_VERSION = '0.7.9';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -280,7 +280,7 @@ async function loadEmmaBackendState() {
   const ownedCharacterIds = charactersRows.filter(c => c.owner_user_id === sessionUserId).map(c => c.id);
   const characterChatFilter = ownedCharacterIds.length ? 'user_id.eq.'+sessionUserId+',character_id.in.('+ownedCharacterIds.join(',')+')' : 'user_id.eq.'+sessionUserId+(assignedCharacterId?',character_id.eq.'+assignedCharacterId:'');
   const [chatsRows, reportsRows, applicationsRows, missionRows, publicConfig] = await Promise.all([
-    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession ? {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,created_at'} : {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,created_at',or:characterChatFilter}),
+    viceSession ? (profileResult.chats || []) : fetchAllEmmaRows('chats', null, adminSession ? {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,owner_unread,hidden_from_owner,created_at'} : {columns:'id,user_id,character_id,character_ids,last_message,last_time,unread,owner_unread,hidden_from_owner,created_at',or:characterChatFilter}),
     adminSession ? fetchAllEmmaRows('character_reports', null, {columns:'id,reporter_user_id,reported_user_id,character_id,chat_id,reason,status,created_at,reviewed_at'}) : viceSession ? (profileResult.reports || []) : Promise.resolve([]),
     adminSession ? fetchAllEmmaRows('character_applications', null, {columns:'id,user_id,status,requested_at,assigned_character_id'}) : Promise.resolve([]),
     viceSession ? (profileResult.missions || []) : fetchAllEmmaRows('missions', null, {columns:'id,title,description,icon,reward,xp_reward,vip_reward_days,type,target,is_new_user'}),
@@ -314,7 +314,7 @@ async function loadEmmaBackendState() {
   }));
   const chats = chatsRows.map(c => ({
     id:c.id, userId:c.user_id, charId:c.character_id, characterIds:Array.isArray(c.character_ids)&&c.character_ids.length?c.character_ids:[c.character_id], lastMessage:c.last_message || '',
-    lastTime:Date.parse(c.last_time || c.created_at), unread:c.unread || 0, createdAt:Date.parse(c.created_at)
+    lastTime:Date.parse(c.last_time || c.created_at), unread:c.unread || 0, ownerUnread:Number(c.owner_unread||0), hiddenFromOwner:!!c.hidden_from_owner, createdAt:Date.parse(c.created_at)
   }));
   const messages = {};
   for (const m of messagesRows) {
@@ -1301,6 +1301,7 @@ async function handleProfileBannerUpload(input){
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.78));
     if(!blob)throw new Error('Não foi possível compactar a imagem.');
     if(blob.size>6*1024*1024)throw new Error('A imagem compactada excede 6 MB.');
+    const compact=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Não foi possível preparar o banner.'));reader.readAsDataURL(blob);});
     const saved=await emmaApi('profile_save_banner',{imageData:compact});
     const publicUrl=saved.bannerUrl;
     if(!publicUrl)throw new Error('O servidor não retornou o endereço do banner.');
@@ -1601,7 +1602,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   const localChat = requestedChatId
     ? localChats.find(c => c.id === requestedChatId)
     : localChats.sort((a,b) => (b.createdAt||b.lastTime||0) - (a.createdAt||a.lastTime||0))[0];
-  state.currentChat = { charId, char, chatId: localChat?.id || null, openRequest:requestKey };
+  state.currentChat = { charId, char, chatId: localChat?.id || null, hiddenFromOwner:!!localChat?.hiddenFromOwner, openRequest:requestKey };
   el('chat-char-name').textContent = char.name;
   el('chat-char-status').textContent = char.isOnline ? '🟢 Online' : '🤖 Offline · Bot respondendo';
   el('chat-char-status').className = 'chat-header-status ' + (char.isOnline ? '' : 'bot-active');
@@ -1623,7 +1624,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
     const row = result.chat;
     const chat = { id:row.id, userId:row.user_id, charId:row.character_id, characterIds:Array.isArray(row.character_ids)&&row.character_ids.length?row.character_ids:[row.character_id],
       createdAt:Date.parse(row.created_at), lastMessage:row.last_message || '',
-      lastTime:Date.parse(row.last_time || row.created_at), unread:row.unread || 0 };
+      lastTime:Date.parse(row.last_time || row.created_at), unread:row.unread || 0, ownerUnread:Number(row.owner_unread||0), hiddenFromOwner:!!row.hidden_from_owner };
     const chats = DB.get('chats', []).filter(c => c.id !== chat.id);
     chats.push(chat); DB.set('chats', chats);
     state.currentChat.chatId = chat.id;
@@ -1770,9 +1771,11 @@ function renderChatScreen(char, chat) {
   const newChatButton = el('chat-new-btn');
   const resetChatButton = el('chat-reset-btn');
   const botsButton = el('chat-bots-btn');
+  const privateBotButton = el('chat-bot-reply-btn');
   if (botsButton) botsButton.classList.toggle('hidden', controllerView);
   if (newChatButton) newChatButton.classList.toggle('hidden', controllerView || !isPremiumActive());
   if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
+  if (privateBotButton) privateBotButton.classList.toggle('hidden', controllerView || !state.currentChat?.chatId);
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
   const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !!char.image;
   const backgroundImage = controllerView
@@ -2066,6 +2069,27 @@ async function sendMessage() {
   await botRespond(earlyTyping, !!earlyTyping);
 }
 
+async function requestPrivateBotReply() {
+  const active=state.currentChat;
+  if(!active?.chatId||!active.char)return toast('Abra uma conversa primeiro.','error');
+  if(active.char.ownerUserId===state.currentUser?.id)return toast('Esta é uma conversa do seu próprio personagem.','error');
+  if(state.isTyping)return;
+  const button=el('chat-bot-reply-btn');
+  if(button){button.disabled=true;button.textContent='🤖 Preparando resposta…';}
+  try{
+    await emmaApi('hide_chat_from_character_owner',{chatId:active.chatId});
+    active.hiddenFromOwner=true;
+    const chats=DB.get('chats',[]),local=chats.find(c=>c.id===active.chatId);
+    if(local){local.hiddenFromOwner=true;DB.set('chats',chats);}
+    toast('Conversa privada ativada. O dono do personagem não verá este chat.','success',3500);
+    await botRespond(null,false,true);
+  }catch(error){
+    toast(error.message||'Não foi possível solicitar a resposta privada.','error',6000);
+  }finally{
+    if(button){button.disabled=false;button.textContent='🤖 Bot responder (privado)';}
+  }
+}
+
 function createTypingIndicator(char, chatId) {
   const container = el('chat-messages');
   if (!container || state.currentChat?.chatId !== chatId) return null;
@@ -2084,7 +2108,7 @@ function removeTypingIndicator(node) {
   if (node?.parentNode) node.remove();
 }
 
-async function botRespond(typingEl = null, alreadyTyping = false) {
+async function botRespond(typingEl = null, alreadyTyping = false, autonomous = false) {
   if (state.isTyping && !alreadyTyping) return;
   state.isTyping = true;
   let activeTypingEl = typingEl;
@@ -2110,7 +2134,7 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
     const userText = lastUserMsg?.text || '';
     let ordered;
     try {
-      const aiReply = await emmaApi('generate_character_reply', { chatId: activeChat.chatId, aiModel:getChatAiModel(activeChat.chatId) });
+      const aiReply = await emmaApi('generate_character_reply', { chatId: activeChat.chatId, aiModel:getChatAiModel(activeChat.chatId), autonomous:!!autonomous });
       const generatedText = String(aiReply?.text || '').trim();
       if (!generatedText) throw new Error('A IA retornou uma resposta vazia.');
       if (!aiReply?.id) throw new Error('A resposta da IA não confirmou o salvamento no servidor.');
@@ -2729,7 +2753,8 @@ function renderCharacterInbox(container, character, chats) {
     const player = users.find(u => u.id === chat.userId);
     const last = (messages[chat.id] || []).slice(-1)[0];
     const preview = last?.text || chat.lastMessage || 'Sem mensagens';
-    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')}</b><div class="admin-row-sub">${escapeHtml(preview)}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Abrir conversa</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
+    const unread=Number(chat.ownerUnread||0);
+    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')} ${unread>0?`<span class="chat-unread" title="${unread} mensagem(ns) nova(s)">${unread}</span>`:''}</b><div class="admin-row-sub">${escapeHtml(preview)}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Abrir conversa</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
   }).join('') || '<div class="admin-row-sub">As conversas dos jogadores aparecerão aqui.</div>';
 }
 
@@ -2739,7 +2764,9 @@ async function replyAsCharacter(chatId) {
   if (!char) return toast('Você não controla o personagem desta conversa.', 'error');
   if (!chat) return toast('Conversa não encontrada.', 'error');
   state.currentChat = { charId: char.id, char, chatId, userId: chat.userId };
-  emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chatId);
+  chat.ownerUnread=0;
+  emmaSupabase.from('chats').update({ owner_unread: 0 }).eq('id', chatId);
+  const localChats=DB.get('chats',[]);const localChat=localChats.find(c=>c.id===chatId);if(localChat)localChat.ownerUnread=0;DB.set('chats',localChats);
   try {
     state.currentChat.playerProfile = await emmaApi('get_chat_participant_profile', { chatId });
   } catch (e) { console.warn('Não foi possível carregar o avatar do participante:', e.message); }
