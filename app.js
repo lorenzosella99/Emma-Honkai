@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.4';
+const EMMA_APP_VERSION = '0.8.5';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1531,14 +1531,17 @@ function showCharacterDetailsModal(characterId) {
   modal.querySelector('.character-details-chat').onclick=()=>{close();openChat(c.id);};
 }
 
+let creatorDirectoryCache = [];
 function renderPlayerGrid(container, players, pref='all') {
   if (!container) return;
+  creatorDirectoryCache = Array.isArray(players) ? players.slice() : [];
   const allChars=DB.get('characters',[]).filter(c=>!c.isBanned);
   const groups=new Map();
   players.forEach(u=>{
     const key=String(u.userId||u.id||u.username);
-    if(!groups.has(key))groups.set(key,{name:u.username||'Criador',characters:[]});
+    if(!groups.has(key))groups.set(key,{name:u.username||'Criador',creator:u,characters:[]});
     const group=groups.get(key);
+    if(u.userId||u.id)group.creator=u;
     const owned=allChars.filter(c=>String(c.ownerUserId)===key);
     const candidates=owned.length?owned:(u.character&&!u.character.isBanned?[u.character]:[]);
     candidates.forEach(c=>{if(!group.characters.some(x=>String(x.id)===String(c.id)))group.characters.push(c);});
@@ -1553,9 +1556,35 @@ function renderPlayerGrid(container, players, pref='all') {
     container.innerHTML='<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum criador nesta categoria</div>';
     return;
   }
-  container.innerHTML=visible.map(g=>'<section class="creator-compact-group"><div class="creator-compact-name">'+escapeHtml(g.name)+'</div><div class="creator-compact-characters">'+g.characters.map(c=>'<button type="button" class="creator-compact-character" data-character-id="'+escapeHtml(String(c.id))+'">'+escapeHtml(c.name||'Personagem')+'</button>').join('')+'</div></section>').join('');
+  container.innerHTML=visible.map(g=>'<section class="creator-compact-group"><button type="button" class="creator-compact-name" data-creator-user-id="'+escapeHtml(String(g.creator?.userId||g.creator?.id||''))+'">'+escapeHtml(g.name)+'</button><div class="creator-compact-characters">'+g.characters.map(c=>'<button type="button" class="creator-compact-character" data-character-id="'+escapeHtml(String(c.id))+'">'+escapeHtml(c.name||'Personagem')+'</button>').join('')+'</div></section>').join('');
   container.querySelectorAll('[data-character-id]').forEach(button=>button.addEventListener('click',()=>openChat(button.dataset.characterId)));
+  container.querySelectorAll('[data-creator-user-id]').forEach(button=>button.addEventListener('click',()=>openCreatorProfile(button.dataset.creatorUserId)));
 }
+function openCreatorProfile(userId) {
+  const creator=creatorDirectoryCache.find(c=>String(c.userId||c.id)===String(userId));
+  if(!creator)return toast('Perfil do criador não encontrado. Atualize a aba e tente novamente.','error');
+  const chars=DB.get('characters',[]).filter(c=>String(c.ownerUserId)===String(userId)&&!c.isBanned);
+  const avatar=safeImageUrl(creator.avatar||creator.character?.image||'');
+  const level=Math.max(1,Number(creator.creatorLevel||creator.creator_level||creator.level||1));
+  const following=!!(creator.following||creator.isFollowing||creator.is_following);
+  const isSelf=String(userId)===String(state.currentUser?.id);
+  const overlay=document.createElement('div');overlay.className='modal-overlay';overlay.id='creator-profile-modal';
+  const modal=document.createElement('div');modal.className='modal creator-profile-modal';modal.style.maxWidth='460px';
+  modal.innerHTML='<div class="modal-header"><h3>Perfil do criador</h3><button type="button" class="modal-close" aria-label="Fechar">×</button></div>'+
+    '<div class="creator-profile-head">'+(avatar?'<img class="creator-profile-avatar" src="'+escapeHtml(avatar)+'" alt="" onerror="this.hidden=true">':'<div class="creator-profile-avatar creator-profile-avatar-fallback">✦</div>')+
+    '<div class="creator-profile-identity"><strong>'+escapeHtml(creator.username||'Criador')+'</strong><span>Nível de criador '+level+'</span></div></div>'+
+    (creator.bio?'<p class="creator-profile-bio">'+escapeHtml(creator.bio)+'</p>':'')+
+    '<div class="creator-profile-stats"><div><strong>'+chars.length+'</strong><span>Personagens</span></div><div><strong>'+Number(creator.creatorXp||creator.creator_xp||0).toLocaleString('pt-BR')+'</strong><span>XP de criador</span></div></div>'+
+    '<div class="creator-profile-character-list">'+(chars.length?chars.map(c=>'<button type="button" class="creator-profile-character" data-open-character="'+escapeHtml(String(c.id))+'">'+escapeHtml(c.name||'Personagem')+' <span>›</span></button>').join(''):'<p class="admin-row-sub">Este criador ainda não publicou personagens visíveis.</p>')+'</div>'+
+    (!isSelf?'<div class="modal-actions"><button type="button" class="btn '+(following?'btn-secondary':'btn-primary')+'" id="creator-profile-follow">'+(following?'Deixar de seguir':'Seguir criador')+'</button></div>':'');
+  overlay.append(modal);document.body.append(overlay);
+  const close=()=>overlay.remove();modal.querySelector('.modal-close').onclick=close;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  modal.querySelectorAll('[data-open-character]').forEach(button=>button.addEventListener('click',()=>{const id=button.dataset.openCharacter;close();openChat(id);}));
+  const followButton=modal.querySelector('#creator-profile-follow');
+  if(followButton)followButton.onclick=async()=>{followButton.disabled=true;try{await toggleCreatorFollow(String(userId),!following);close();}finally{followButton.disabled=false;}};
+}
+
 async function toggleCreatorFollow(userId,follow) {
   try {
     await emmaApi("follow_creator",{userId,follow});
@@ -2573,6 +2602,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.8.5',title:'Perfis de criadores e correções de imagens no chat',items:['O nome de cada criador na aba Criadores abre um perfil público com nível, XP e personagens publicados.','Os personagens do perfil podem ser abertos diretamente e é possível seguir ou deixar de seguir o criador.','O papel de parede do chat permanece aplicado à área de mensagens durante toda a rolagem.','A imagem de fundo respeita a preferência de ocultar imagens e o modo de fotosensibilidade.']},
     {version:'0.8.4',title:'Correção de exibição do banner de perfil',items:['O banner agora é renderizado como uma imagem real sobre o fundo, em vez de depender apenas de background-image do CSS.','A imagem tem tratamento de falha de carregamento e atualização imediata após a migração de banners antigos.','A URL do banner continua sendo validada e carregada a partir do perfil do usuário.']},
     {version:'0.8.3',title:'Correções de preferências, chat e navegação',items:['O modo anônimo e a preferência de ocultar imagens agora podem ser editados sem serem apagados ao salvar outras preferências.','Ações e pensamentos digitados dentro de falas voltam a receber a formatação correta.','Anúncios flutuantes são removidos ao sair do chat, evitando que permaneçam em outras telas.','O perfil mostra corretamente o tipo de conta; a navegação e o seletor de tipo de mensagem verificam se os elementos existem.','Removido o fluxo de chat de jogador que criava conversas apenas locais e não persistidas no servidor.']},
     {version:'0.7.6',title:'Painel Admin mantém a posição ao atualizar códigos',items:['A atualização dos códigos de acesso não desloca mais a visualização para o fim da página.','A posição de rolagem do painel é preservada durante o carregamento e a exibição dos códigos.']},
