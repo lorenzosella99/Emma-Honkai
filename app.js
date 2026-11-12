@@ -2476,6 +2476,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.9',title:'Limite de personagens por conta e edição de usuários',items:['Admin pode definir de 0 a 50 personagens controlados para cada conta do tipo personagem.','O servidor valida o limite ao aprovar pedidos e ao atribuir ou trocar o controlador.','Opções básicas dos usuários foram reunidas no botão de lápis do painel Admin.']},
     {version:'0.6.8',title:'Aceite dos documentos durante o cadastro',items:['Novas contas precisam marcar os três aceites antes de enviar o cadastro.','Links para Política de Privacidade, Política de Segurança e Termos de Uso disponíveis na tela de cadastro.','O aceite é registrado no servidor após a autenticação e antes de liberar o acesso.']},
     {version:'0.6.7',title:'Termos de Uso e aceite dos três documentos',items:['Publicados os Termos de Uso com deveres básicos, regras de convivência e usos proibidos.','O aceite agora exige Política de Privacidade, Política de Segurança e Termos de Uso.','O servidor registra a versão dos três documentos e solicita novo aceite para todas as contas existentes.']},
     {version:'0.6.6',title:'Criadores em lista vertical',items:['Cada usuário ocupa uma linha inteira, com seus personagens logo abaixo.','O próximo usuário aparece somente depois da lista de personagens do anterior.']},
