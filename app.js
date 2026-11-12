@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.4';
+const EMMA_APP_VERSION = '0.6.5';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1423,18 +1423,27 @@ function showCharacterDetailsModal(characterId) {
 
 function renderPlayerGrid(container, players) {
   if (!container) return;
-  if (!players.length) {
-    container.innerHTML = '<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum criador nesta categoria</div>';
+  const allChars=DB.get('characters',[]).filter(c=>!c.isBanned);
+  const groups=new Map();
+  players.forEach(u=>{
+    const key=String(u.userId||u.id||u.username);
+    if(!groups.has(key))groups.set(key,{name:u.username||'Criador',characters:[]});
+    const group=groups.get(key);
+    const owned=allChars.filter(c=>String(c.ownerUserId)===key);
+    const candidates=owned.length?owned:(u.character&&!u.character.isBanned?[u.character]:[]);
+    candidates.forEach(c=>{if(!group.characters.some(x=>String(x.id)===String(c.id)))group.characters.push(c);});
+  });
+  const visible=[...groups.values()].map(g=>{
+    g.characters=g.characters.filter(c=>(state.characterFilter==='vip'?!!c.isVip:state.characterFilter==='normal'?!c.isVip:true))
+      .filter(c=>state.characterGenderFilter==='female'?c.gender==='female':state.characterGenderFilter==='male'?c.gender==='male':true)
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+    return g;
+  }).filter(g=>g.characters.length);
+  if (!visible.length) {
+    container.innerHTML='<div style="padding:16px;color:var(--text-3);font-size:.85rem;grid-column:1/-1">Nenhum criador nesta categoria</div>';
     return;
   }
-  container.innerHTML = players.map(u => {
-    const assigned=u.character||null;
-    const avatarSrc=assigned?.image||u.avatar||FALLBACK_SVG;
-    const displayName=assigned?.name||u.username;
-    const online=!!(u.lastSeenAt&&Date.now()-Number(u.lastSeenAt)<60000);
-    const details=u.detailsVisible?'<div class="char-role">'+escapeHtml(u.username)+' · Nível '+Number(u.level||1)+'</div>':'<div class="char-role">Detalhes ocultos até seguimento mútuo</div>';
-    return '<div class="char-card creator-card" onclick="openChat(\''+(assigned?.id||'')+'\')"><div class="char-img-wrap"><img src="'+characterImageSource(avatarSrc)+'" alt="'+escapeHtml(displayName)+'" loading="lazy" onerror="this.src=\''+FALLBACK_SVG+'\'" style="object-fit:cover"><div class="char-status-dot '+(online?'online':'bot')+'"></div></div><div class="char-info"><div class="char-name">'+escapeHtml(displayName)+(u.isVip?' <span class="chip chip-gold">VIP</span>':'')+'</div>'+details+'<button class="btn btn-secondary btn-sm" style="margin-top:7px" onclick="event.stopPropagation();toggleCreatorFollow(\''+u.userId+'\','+(!u.following)+')">'+(u.following?'Seguindo':'Seguir')+'</button></div></div>';
-  }).join('');
+  container.innerHTML=visible.map(g=>'<section class="creator-compact-group"><div class="creator-compact-name">'+escapeHtml(g.name)+'</div><div class="creator-compact-characters">'+g.characters.map(c=>'<button type="button" class="creator-compact-character" onclick="openChat(\\''+String(c.id).replace(/['"\\\\]/g,'')+'\\')">'+escapeHtml(c.name||'Personagem')+'</button>').join('')+'</div></section>').join('');
 }
 async function toggleCreatorFollow(userId,follow) {
   try {
@@ -2439,6 +2448,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.5',title:'Lista compacta na aba Criadores',items:['Criadores organizados pelo nome, com os personagens exibidos em tamanho reduzido logo abaixo.','Layout compacto aplicado somente à aba Criadores.']},
     {version:'0.6.4',title:'Seletor de modelos mais compacto',items:['Barra de seleção de IA reduzida para ocupar menos espaço no chat.','Aparência refinada, melhor adaptação a telas pequenas e descrição mais discreta.']},
     {version:'0.6.3',title:'Três modelos OpenRouter por conversa',items:['Adicionadas opções Qwen 3.8 27B, Venice Uncensored e Nemotron 3 Ultra.','Qwen e Nemotron podem ser escolhidos por todos; Venice continua exclusivo do VIP.','Cada conversa salva seu modelo e o servidor tenta modelos alternativos se o selecionado falhar.']},
     {version:'0.6.2',title:'Modelo VIP gratuito e seletor de IA',items:['Assinantes VIP podem escolher entre a IA principal e Venice Uncensored gratuito pelo OpenRouter.','Se o modelo VIP estiver indisponível, o servidor tenta automaticamente a IA principal e depois o fallback configurado.','O seletor fica acima das mensagens e a escolha é salva por conversa.']},
