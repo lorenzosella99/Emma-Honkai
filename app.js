@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.5.50';
+const EMMA_APP_VERSION = '0.6.0';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1186,6 +1186,35 @@ function updateNavBadges() {
   } catch(e) { console.warn('updateNavBadges:', e); }
 }
 
+
+function getProfileBannerStyle(userId){
+  try{const src=localStorage.getItem('emma_profile_banner_'+userId);return src?'background-image:linear-gradient(180deg,rgba(8,8,18,.08),rgba(8,8,18,.25)),url("'+src+'");background-size:cover;background-position:center':'';}
+  catch{return '';}
+}
+function triggerProfileBannerUpload(){el('profile-banner-input')?.click();}
+async function handleProfileBannerUpload(input){
+  const file=input?.files?.[0];if(!file)return;
+  if(!file.type.startsWith('image/'))return toast('Escolha um arquivo de imagem.','error');
+  if(file.size>12*1024*1024)return toast('A imagem deve ter até 12 MB.','error');
+  try{
+    const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
+    const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=data;});
+    const canvas=document.createElement('canvas'),scale=Math.min(1,1600/image.width,520/image.height);
+    canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+    canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    const compact=canvas.toDataURL('image/webp',.78);
+    localStorage.setItem('emma_profile_banner_'+state.currentUser.id,compact);
+    const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(state.currentUser.id);
+    toast('Banner atualizado neste dispositivo.','success');
+  }catch(error){console.warn('Banner:',error);toast('Não foi possível atualizar o banner.','error');}
+  finally{input.value='';}
+}
+function setCharacterDirectoryTab(tab){
+  state.characterDirectoryTab=tab==='creators'?'creators':'characters';
+  const content=el('tab-content');
+  if(content&&state.currentTab==='chars')renderCharsTab(content);
+}
+
 // ─── CHARS TAB ───────────────────────────────────────────────────────────────
 function renderCharsTab(container) {
   const pref = state.currentUser.chatPreference || 'both';
@@ -1214,6 +1243,10 @@ function renderCharsTab(container) {
     <div style="padding-bottom:calc(var(--nav-h) + 12px)">
       <div class="plan-promo-banner"><div><strong>✨ Planos Emma</strong><small>Desbloqueie pensamentos e conteúdos exclusivos com moedas Emma.</small></div><button class="btn btn-primary btn-sm" onclick="switchTab('store')">Ver planos</button></div>
       <div class="bot-directory-filters" style="padding:0 16px 8px"><div class="chip-group">${prefOptions}</div><div class="chip-group" style="margin-top:8px"><button class="chip-select ${(!state.characterFilter||state.characterFilter==='normal')?'active':''}" onclick="setCharacterFilter('normal')">Normais</button>${isPremiumActive() ? `<button class="chip-select ${state.characterFilter==='vip'?'active':''}" onclick="setCharacterFilter('vip')">👑 VIP</button>` : ''}<button class="chip-select ${state.characterFilter==='players'?'active':''}" onclick="setCharacterFilter('players')">🎮 Só jogadores</button></div></div>
+      <div class="character-directory-tabs" role="tablist" aria-label="Categorias de personagens">
+        <button type="button" class="chip-select ${state.characterDirectoryTab!=='creators'?'active':''}" onclick="setCharacterDirectoryTab('characters')">Personagens</button>
+        <button type="button" class="chip-select ${state.characterDirectoryTab==='creators'?'active':''}" onclick="setCharacterDirectoryTab('creators')">✍️ Criadores</button>
+      </div>
       <div class="section-title" id="bots-official-title">⭐ Bots oficiais</div>
       <div style="padding:0 16px 8px;color:var(--text-3);font-size:.8rem">Personagens oficiais do Emma Honkai. Emma é a principal e original.</div>
       <div class="chars-grid" id="chars-grid-bots-official">
@@ -1228,6 +1261,11 @@ function renderCharsTab(container) {
         <div class="chars-grid" id="chars-grid-players">
           ${Array(2).fill(skeletonCard).join('')}
         </div>
+      </div>
+      <div id="user-created-characters-section" style="display:none">
+        <div class="section-title" style="margin-top:14px">✍️ Personagens criados pela comunidade</div>
+        <div style="padding:0 16px 10px;color:var(--text-3);font-size:.8rem">Personagens publicados por outros usuários.</div>
+        <div class="chars-grid" id="chars-grid-user-created"></div>
       </div>
       <div style="height:8px"></div>
     </div>
@@ -1249,6 +1287,7 @@ function _renderCharsContent(pref) {
   const chars = DB.get('characters', []);
   const users = DB.get('users', []);
   const category=state.characterFilter||"normal";
+  const creatorsView=state.characterDirectoryTab==='creators';
 
   // Apply gender filter to bots
   let bots = category==="players" ? [] : chars.filter(c => !c.isBanned && !c.ownerUserId && (category==="vip"&&isPremiumActive()?c.isVip:!c.isVip));
@@ -1275,13 +1314,21 @@ function _renderCharsContent(pref) {
   const gbSecondary = el('chars-grid-bots-secondary');
   const gpPlayers = el('chars-grid-players');
   const playersSec = el('players-section');
-
+  const createdSec=el('user-created-characters-section');
+  const createdGrid=el('chars-grid-user-created');
+  const userCreatedChars=chars.filter(c=>c.ownerUserId && c.ownerUserId!==state.currentUser.id && !c.isBanned)
+    .filter(c=>category==="vip"?!!c.isVip:category==="normal"?!c.isVip:true)
+    .filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":true)
+    .sort((x,y)=>String(x.name||"").localeCompare(String(y.name||""),"pt-BR"));
+  if(createdGrid)renderCharGrid(createdGrid,userCreatedChars);
+  if(createdSec)createdSec.style.display=creatorsView?"block":"none";
   const playersOnly=category==="players";
   const officialTitle=el('bots-official-title'), secondaryTitle=el('bots-secondary-title');
-  if (gbOfficial) { gbOfficial.style.display=playersOnly?'none':''; renderCharGrid(gbOfficial, officialBots); }
-  if (gbSecondary) { gbSecondary.style.display=playersOnly?'none':''; renderCharGrid(gbSecondary, secondaryBots); }
-  if (officialTitle) officialTitle.style.display=playersOnly?'none':'';
-  if (secondaryTitle) secondaryTitle.style.display=playersOnly?'none':'';
+  if (gbOfficial) { gbOfficial.style.display=playersOnly||creatorsView?'none':''; renderCharGrid(gbOfficial, officialBots); }
+  if (gbSecondary) { gbSecondary.style.display=playersOnly||creatorsView?'none':''; renderCharGrid(gbSecondary, secondaryBots); }
+  if(playersSec)playersSec.style.display=creatorsView?'none':'';
+  if (officialTitle) officialTitle.style.display=playersOnly||creatorsView?'none':'';
+  if (secondaryTitle) secondaryTitle.style.display=playersOnly||creatorsView?'none':'';
   if (gpPlayers) {
     gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
     emmaApi("creator_directory",{}).then(({creators=[]})=>{
@@ -2129,7 +2176,10 @@ function renderProfileTab(container) {
   const prefLabel = { both:'👥 Todos', bots:'🤖 Só Bots', female:'♀ Mulheres', male:'♂ Homens', players:'🎭 Só Players' }[user.chatPreference || 'both'];
 
   container.innerHTML = `
-    <div class="profile-banner"></div>
+    <div class="profile-banner" id="profile-banner" style="${getProfileBannerStyle(user.id)}">
+      <button class="profile-banner-edit" type="button" onclick="triggerProfileBannerUpload()" title="Alterar banner">📷 Alterar banner</button>
+      <input type="file" id="profile-banner-input" accept="image/*" hidden onchange="handleProfileBannerUpload(this)">
+    </div>
     <div style="padding-bottom:calc(var(--nav-h) + 16px)">
       <div class="profile-avatar-wrap">
         <div class="profile-avatar" style="position:relative">
