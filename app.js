@@ -339,6 +339,7 @@ async function loadEmmaBackendState() {
   if (publicConfig?.config) { const config = cfg(); Object.assign(config, publicConfig.config); DB.set('config', config); }
   const me = users.find(u => u.id === state.currentUser?.id);
   if (me) state.currentUser = me;
+  if (me) migrateLegacyProfileBanner(me);
   applyPremiumTheme();
   if (state.currentUser?.bannedUntil && Date.now() < state.currentUser.bannedUntil) {
     await emmaSupabase.auth.signOut();
@@ -1246,8 +1247,10 @@ function updateNavBadges() {
 }
 
 
+const legacyBannerMigrationInFlight = new Set();
 async function migrateLegacyProfileBanner(user){
-  if(!user?.id||!emmaSupabase)return;
+  if(!user?.id||!emmaSupabase||legacyBannerMigrationInFlight.has(user.id))return;
+  legacyBannerMigrationInFlight.add(user.id);
   const key='emma_profile_banner_'+user.id;
   let legacy='';
   try{legacy=localStorage.getItem(key)||'';}catch{return;}
@@ -1272,6 +1275,7 @@ async function migrateLegacyProfileBanner(user){
     DB.set('users',users);
     const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
   }catch(error){console.warn('Migração do banner antigo:',error);}
+  finally{legacyBannerMigrationInFlight.delete(user.id);}
 }
 
 function getProfileBannerStyle(userId){
