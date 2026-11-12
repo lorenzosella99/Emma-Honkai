@@ -1477,7 +1477,7 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 
 /* Emma Honkai 0.8.1 — interface de chat e listas mais limpas */
 #screen-chat{min-height:0;overflow:hidden}
-#screen-chat .chat-messages{min-height:0;padding:18px clamp(12px,3vw,34px);background:linear-gradient(180deg,#10111a,#0b0c13)}
+#screen-chat .chat-messages{min-height:0;padding:18px clamp(12px,3vw,34px);background-color:#0b0c13;background-image:linear-gradient(rgba(10,11,16,.54),rgba(10,11,16,.66)),var(--chat-character-bg,none);background-position:center center;background-size:cover;background-repeat:no-repeat;background-attachment:scroll}
 #screen-chat .chat-messages::before{display:none}
 #screen-chat .msg-bubble{box-shadow:0 2px 8px #0002}
 #screen-chat .chat-format-hint{padding:7px 14px 3px;background:#0d0e16;color:var(--text-3);font-size:.7rem;line-height:1.4}
@@ -1531,4 +1531,25 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 .profile-banner{isolation:isolate}
 .profile-banner-image{position:absolute;inset:0;z-index:0;width:100%;height:100%;display:block;object-fit:cover;object-position:center;pointer-events:none}
 .profile-banner-image[hidden],.profile-banner-image[src=""]{display:none}
+.profile-banner-edit{z-index:2}
+
+/* Perfil público de criadores */
+#chars-grid-players .creator-compact-name{display:inline-block;padding:2px 0;border:0;background:transparent;text-align:left;font:inherit;color:var(--accent-2);cursor:pointer;text-decoration:underline;text-decoration-color:#8b5cf655;text-underline-offset:3px}
+#chars-grid-players .creator-compact-name:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.creator-profile-head{display:flex;align-items:center;gap:13px;padding:8px 0 14px}
+.creator-profile-avatar{width:64px;height:64px;flex:0 0 64px;border-radius:50%;object-fit:cover;border:2px solid var(--accent);background:var(--bg-3)}
+.creator-profile-avatar-fallback{display:grid;place-items:center;font-size:1.5rem;color:var(--accent-2)}
+.creator-profile-identity{display:flex;flex-direction:column;gap:5px;min-width:0}
+.creator-profile-identity strong{font-size:1.05rem;overflow-wrap:anywhere}
+.creator-profile-identity span,.creator-profile-bio{font-size:.78rem;color:var(--text-2)}
+.creator-profile-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:4px 0 14px}
+.creator-profile-stats>div{display:flex;flex-direction:column;gap:3px;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--bg-3)}
+.creator-profile-stats strong{font-size:1.1rem;color:var(--accent-2)}
+.creator-profile-stats span{font-size:.68rem;color:var(--text-3)}
+.creator-profile-character-list{display:grid;gap:6px;max-height:32vh;overflow:auto}
+.creator-profile-character{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-3);color:var(--text-1);text-align:left}
+.creator-profile-character span{color:var(--accent-2);font-size:1.1rem}
+.profile-banner{isolation:isolate}
+.profile-banner::after{z-index:1;pointer-events:none}
+.profile-banner-image{z-index:0;object-fit:cover;object-position:center}
 .profile-banner-edit{z-index:2}
