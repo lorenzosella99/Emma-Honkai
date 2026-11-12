@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.5';
+const EMMA_APP_VERSION = '0.7.6';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2509,6 +2509,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.7.6',title:'Painel Admin mantém a posição ao atualizar códigos',items:['A atualização dos códigos de acesso não desloca mais a visualização para o fim da página.','A posição de rolagem do painel é preservada durante o carregamento e a exibição dos códigos.']},
     {version:'0.7.0',title:'Limite de controle configurado nas opções de qualquer usuário',items:['O limite de 0 a 50 personagens agora fica nas opções de usuários do painel Admin, independentemente do tipo da conta.','A validação do limite é aplicada a todas as contas ao atribuir ou aprovar personagens.','A edição básica continua reunida no botão de lápis.']},
     {version:'0.6.9',title:'Limite de personagens por conta e edição de usuários',items:['Admin pode definir de 0 a 50 personagens controlados para cada conta do tipo personagem.','O servidor valida o limite ao aprovar pedidos e ao atribuir ou trocar o controlador.','Opções básicas dos usuários foram reunidas no botão de lápis do painel Admin.']},
     {version:'0.6.8',title:'Aceite dos documentos durante o cadastro',items:['Novas contas precisam marcar os três aceites antes de enviar o cadastro.','Links para Política de Privacidade, Política de Segurança e Termos de Uso disponíveis na tela de cadastro.','O aceite é registrado no servidor após a autenticação e antes de liberar o acesso.']},
@@ -3088,6 +3089,20 @@ function applyViceAdminPanelVisibility(container){const user=state.currentUser;i
 let currentAdminAccessCodes = null;
 async function loadAdminAccessCodes() {
   if (!state.currentUser?.isAdmin) return;
+  // A atualização do bloco aumenta sua altura. Preserve a posição de rolagem
+  // para que o navegador não salte para o fim do painel após inserir os códigos.
+  const adminContent = el('admin-content');
+  const adminScreen = el('screen-admin');
+  const scrollState = {
+    content: adminContent?.scrollTop || 0,
+    screen: adminScreen?.scrollTop || 0,
+    page: window.scrollY || 0
+  };
+  const restoreScroll = () => requestAnimationFrame(() => {
+    if (adminContent) adminContent.scrollTop = scrollState.content;
+    if (adminScreen) adminScreen.scrollTop = scrollState.screen;
+    window.scrollTo({top:scrollState.page,left:0,behavior:'instant'});
+  });
   const output = el('admin-access-codes-output');
   if (output) output.textContent = 'Carregando códigos com segurança…';
   try {
@@ -3105,7 +3120,12 @@ async function loadAdminAccessCodes() {
       item('🛡️ Código de Vice-admin',result.viceCode,'vice','Exclusivo da conta de Vice-admin. Expira: '+expiryLabel(result.viceExpiresAt))+
       item('🔐 Código permanente do Admin',result.permanentCode,'permanent','Sem vencimento. Guarde em local privado.')+
       item('🕛 Código temporário do Admin — '+dateLabel,result.temporaryCode,'temporary','Ativo das '+startLabel+' até 23:59:59 (Brasília).');
-  } catch (error) { const target=el('admin-access-codes-output'); if(target)target.textContent=error.message||'Não foi possível carregar os códigos.'; }
+    restoreScroll();
+  } catch (error) {
+    const target=el('admin-access-codes-output');
+    if(target)target.textContent=error.message||'Não foi possível carregar os códigos.';
+    restoreScroll();
+  }
 }
 async function copyAdminAccessCode(kind) {
   const codeMap={user:currentAdminAccessCodes?.userCode,vice:currentAdminAccessCodes?.viceCode,permanent:currentAdminAccessCodes?.permanentCode,temporary:currentAdminAccessCodes?.temporaryCode};
