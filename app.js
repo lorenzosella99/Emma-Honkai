@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.3';
+const EMMA_APP_VERSION = '0.8.4';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1271,19 +1271,22 @@ async function migrateLegacyProfileBanner(user){
     const users=DB.get('users',[]),own=users.find(u=>u.id===user.id);
     if(own)own.bannerUrl=saved.bannerUrl;
     DB.set('users',users);
-    const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
+    const banner=el('profile-banner');if(banner){banner.style.cssText=getProfileBannerStyle(user.id);let bannerImage=el('profile-banner-image');if(!bannerImage){bannerImage=document.createElement('img');bannerImage.id='profile-banner-image';bannerImage.className='profile-banner-image';bannerImage.alt='';banner.appendChild(bannerImage);}bannerImage.src=saved.bannerUrl;bannerImage.hidden=false;}
   }catch(error){console.warn('Migração do banner antigo:',error);}
   finally{legacyBannerMigrationInFlight.delete(user.id);}
 }
 
-function getProfileBannerStyle(userId){
+function getProfileBannerUrl(userId){
   try{
     const profileUrl=state.currentUser?.id===userId?state.currentUser.bannerUrl:null;
     const legacy=localStorage.getItem('emma_profile_banner_'+userId);
     const src=profileUrl||legacy||'';
-    const safe=profileUrl?safeImageUrl(profileUrl):(String(src).startsWith('data:image/')?src:'');
-    return safe?'background-image:linear-gradient(180deg,rgba(8,8,18,.08),rgba(8,8,18,.25)),url("'+safe+'");background-size:cover;background-position:center':'';
+    return profileUrl?safeImageUrl(profileUrl):(String(src).startsWith('data:image/')?src:'');
   }catch{return '';}
+}
+function getProfileBannerStyle(userId){
+  const safe=getProfileBannerUrl(userId);
+  return safe?'background-image:linear-gradient(180deg,rgba(8,8,18,.08),rgba(8,8,18,.25)),url("'+safe+'");background-size:cover;background-position:center':'';
 }
 function triggerProfileBannerUpload(){el('profile-banner-input')?.click();}
 async function handleProfileBannerUpload(input){
@@ -2332,6 +2335,7 @@ function renderProfileTab(container) {
 
   container.innerHTML = `
     <div class="profile-banner" id="profile-banner" style="${getProfileBannerStyle(user.id)}">
+      <img id="profile-banner-image" class="profile-banner-image" src="${escapeHtml(getProfileBannerUrl(user.id))}" alt="" decoding="async" onerror="this.hidden=true">
       <button class="profile-banner-edit" type="button" onclick="triggerProfileBannerUpload()" title="Alterar banner">📷 Alterar banner</button>
       <input type="file" id="profile-banner-input" accept="image/*" hidden onchange="handleProfileBannerUpload(this)">
     </div>
@@ -2569,6 +2573,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.8.4',title:'Correção de exibição do banner de perfil',items:['O banner agora é renderizado como uma imagem real sobre o fundo, em vez de depender apenas de background-image do CSS.','A imagem tem tratamento de falha de carregamento e atualização imediata após a migração de banners antigos.','A URL do banner continua sendo validada e carregada a partir do perfil do usuário.']},
     {version:'0.8.3',title:'Correções de preferências, chat e navegação',items:['O modo anônimo e a preferência de ocultar imagens agora podem ser editados sem serem apagados ao salvar outras preferências.','Ações e pensamentos digitados dentro de falas voltam a receber a formatação correta.','Anúncios flutuantes são removidos ao sair do chat, evitando que permaneçam em outras telas.','O perfil mostra corretamente o tipo de conta; a navegação e o seletor de tipo de mensagem verificam se os elementos existem.','Removido o fluxo de chat de jogador que criava conversas apenas locais e não persistidas no servidor.']},
     {version:'0.7.6',title:'Painel Admin mantém a posição ao atualizar códigos',items:['A atualização dos códigos de acesso não desloca mais a visualização para o fim da página.','A posição de rolagem do painel é preservada durante o carregamento e a exibição dos códigos.']},
     {version:'0.7.0',title:'Limite de controle configurado nas opções de qualquer usuário',items:['O limite de 0 a 50 personagens agora fica nas opções de usuários do painel Admin, independentemente do tipo da conta.','A validação do limite é aplicada a todas as contas ao atribuir ou aprovar personagens.','A edição básica continua reunida no botão de lápis.']},
