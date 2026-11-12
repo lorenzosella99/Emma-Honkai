@@ -3583,7 +3583,7 @@ function showEditCharModal(charId) { showAddCharModal(charId); }
 async function saveChar(editId, btn, creatorMode = false) {
   const existingCharacter = editId ? DB.get('characters', []).find(c => c.id === editId) : null;
   const requestsVip = !!el('cf-is-vip')?.checked;
-  if (existingCharacter ? !canEditCharacter(existingCharacter) : (creatorMode ? state.currentUser?.userType !== 'character' : (!canAdminPermission('edit_characters') || (requestsVip && !canAdminPermission('edit_vip_characters'))))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
+  if (existingCharacter ? !canEditCharacter(existingCharacter) : (creatorMode ? state.currentUser?.role !== 'user' : (!canAdminPermission('edit_characters') || (requestsVip && !canAdminPermission('edit_vip_characters'))))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
   if (charImageProcessing) return toast('Aguarde a compactação da imagem.', 'error');
   const overlay = btn.closest('.modal-overlay');
   const name = el('cf-name').value.trim();
