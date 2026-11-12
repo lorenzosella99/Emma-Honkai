@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.5';
+const EMMA_APP_VERSION = '0.6.6';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2449,6 +2449,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.6',title:'Criadores em lista vertical',items:['Cada usuário ocupa uma linha inteira, com seus personagens logo abaixo.','O próximo usuário aparece somente depois da lista de personagens do anterior.']},
     {version:'0.6.5',title:'Lista compacta na aba Criadores',items:['Criadores organizados pelo nome, com os personagens exibidos em tamanho reduzido logo abaixo.','Layout compacto aplicado somente à aba Criadores.']},
     {version:'0.6.4',title:'Seletor de modelos mais compacto',items:['Barra de seleção de IA reduzida para ocupar menos espaço no chat.','Aparência refinada, melhor adaptação a telas pequenas e descrição mais discreta.']},
     {version:'0.6.3',title:'Três modelos OpenRouter por conversa',items:['Adicionadas opções Qwen 3.8 27B, Venice Uncensored e Nemotron 3 Ultra.','Qwen e Nemotron podem ser escolhidos por todos; Venice continua exclusivo do VIP.','Cada conversa salva seu modelo e o servidor tenta modelos alternativos se o selecionado falhar.']},
