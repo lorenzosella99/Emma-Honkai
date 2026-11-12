@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.8';
+const EMMA_APP_VERSION = '0.6.9';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -215,7 +215,7 @@ async function syncMyProfileFromAppUser(user) {
 function profileToAppUser(p) {
   return {
     id: p.id, username: p.username, role:p.role||'user', isAdmin: p.role === 'admin', isViceAdmin:p.role === 'vice_admin', adminPermissions:p.admin_permissions||{},
-    userType: p.user_type || 'player', gender: p.gender || 'other',
+    userType: p.user_type || 'player', maxControlledCharacters:Math.max(0,Math.min(50,Number(p.max_controlled_characters??50))), gender: p.gender || 'other',
     chatPreference: p.chat_preference || 'both', avatar: p.avatar || null,
     allowBotTakeover: !!p.allow_bot_takeover, isAnonymous:!!p.is_anonymous,
     creatorLevel:Number(p.creator_level||1),creatorXp:Number(p.creator_xp||0),creatorDailyMessages:Number(p.creator_daily_messages||0),creatorDailyDate:p.creator_daily_date||null,creatorWeeklyMessages:Number(p.creator_weekly_messages||0),creatorWeekStart:p.creator_week_start||null,creatorLevel99RewardClaimed:!!p.creator_level99_reward_claimed,
@@ -2933,6 +2933,38 @@ async function adminSetSubscriptionBan(userId, banned) {
   } catch(e) { user.subscriptionRenewalBanned = !banned; toast(e.message, 'error'); }
 }
 
+function showAdminUserEditModal(userId) {
+  if (!state.currentUser?.isAdmin && !canAdminPermission('manage_economy')) return toast('Acesso negado.', 'error');
+  const user=DB.get('users',[]).find(u=>u.id===userId); if(!user)return toast('Usuário não encontrado.','error');
+  const owned=DB.get('characters',[]).filter(c=>c.ownerUserId===userId).length;
+  const overlay=document.createElement('div'); overlay.className='modal-overlay';
+  overlay.innerHTML=`<div class="modal-sheet"><div class="modal-handle"></div><div class="modal-title">✏️ Editar usuário · ${escapeHtml(user.username)}</div>
+    <div class="field"><label>Limite de personagens controlados (0 a 50)</label><input class="input" id="admin-user-character-limit" type="number" min="0" max="50" step="1" value="${Math.max(0,Math.min(50,Number(user.maxControlledCharacters??50)))}" ${state.currentUser?.isAdmin?'':'disabled'}><div class="admin-row-sub">Atualmente controla ${owned} personagem(ns). O limite vale para novas aprovações.</div></div>
+    <div class="modal-actions"><button class="btn btn-secondary flex-1" data-close>Fechar</button><button class="btn btn-primary flex-1" data-save ${state.currentUser?.isAdmin?'':'disabled'}>Salvar limite</button></div>
+    <div class="divider"></div><div class="modal-title">Opções básicas</div>
+    <div class="admin-actions" style="justify-content:flex-start">
+      <button class="btn btn-xs btn-secondary" data-action="password">🔑 Redefinir senha</button>
+      <button class="btn btn-xs btn-secondary" data-action="coins">🪙 Adicionar moedas</button>
+      <button class="btn btn-xs btn-secondary" data-action="renew">${user.subscriptionRenewalBanned?'Liberar renovação':'Bloquear renovação'}</button>
+      ${state.currentUser?.isAdmin?`<button class="btn btn-xs btn-secondary" data-action="age">${user.adultAgeVerified?'Revogar idade':'Verificar +19'}</button>`:''}
+      ${state.currentUser?.isAdmin?`<button class="btn btn-xs btn-secondary" data-action="chats">💬 Ver chats</button>`:''}
+    </div></div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove(); overlay.querySelector('[data-close]').onclick=close;
+  overlay.querySelector('[data-save]').onclick=async()=>{
+    const value=Number(overlay.querySelector('#admin-user-character-limit').value);
+    if(!Number.isInteger(value)||value<0||value>50)return toast('Informe um limite inteiro entre 0 e 50.','error');
+    const save=overlay.querySelector('[data-save]');save.disabled=true;
+    try{await emmaApi('admin_update_user',{userId,maxControlledCharacters:value});await loadEmmaBackendState();toast('Limite de personagens atualizado.','success');close();renderAdminPanel();}
+    catch(e){toast(e.message||'Não foi possível salvar.','error');save.disabled=false;}
+  };
+  overlay.querySelector('[data-action="password"]')?.addEventListener('click',()=>{close();adminResetPassword(userId);});
+  overlay.querySelector('[data-action="coins"]')?.addEventListener('click',()=>{close();adminAddCoins(userId);});
+  overlay.querySelector('[data-action="renew"]')?.addEventListener('click',()=>{close();adminSetSubscriptionBan(userId,!user.subscriptionRenewalBanned);});
+  overlay.querySelector('[data-action="age"]')?.addEventListener('click',()=>{close();adminVerifyUserAge(userId);});
+  overlay.querySelector('[data-action="chats"]')?.addEventListener('click',()=>{close();adminViewUserChats(userId);});
+}
+
 function adminViewUserChats(userId, options = {}) {
   if (!state.currentUser?.isAdmin) return toast('Somente o Admin principal pode consultar todos os chats.', 'error');
   const user = DB.get('users', []).find(u => u.id === userId); if (!user) return toast('Usuário não encontrado.', 'error');
@@ -3222,15 +3254,8 @@ function renderAdminPanel() {
             <div class="admin-row-sub">🪙 ${u.coins} · ${u.totalMessages||0} msgs · desde ${formatDate(u.joinDate)} · idade: ${u.ageYears??'não informada'} · ${u.adultAgeVerified?'🔞 idade verificada':'idade não verificada'}</div>
           </div>
           <div class="admin-actions">
-            <button class="btn btn-xs btn-secondary" onclick="adminResetPassword('${u.id}')" title="Redefinir senha">🔑</button>
+            <button class="btn btn-xs btn-secondary" onclick="showAdminUserEditModal('${u.id}')" title="Editar opções básicas" aria-label="Editar usuário">✏️</button>
             ${u.id !== state.currentUser.id && !u.isViceAdmin ? `<button class="btn btn-xs ${u.isAdmin ? 'btn-danger' : 'btn-secondary'}" onclick="adminSetUserRole('${u.id}','${u.isAdmin ? 'user' : 'admin'}')" title="${u.isAdmin ? 'Remover admin' : 'Tornar admin'}">${u.isAdmin ? 'Tirar admin' : 'Tornar admin'}</button>` : u.isViceAdmin ? '<span class="chip" style="font-size:.6rem">VICE-ADMIN</span>' : ''}
-            <button class="btn btn-xs btn-secondary" onclick="adminAddCoins('${u.id}')" title="Adicionar moedas">🪙+</button>
-            ${u.subscriptionRenewalBanned
-              ? `<button class="btn btn-xs btn-secondary" onclick="adminSetSubscriptionBan('${u.id}', false)">Liberar renovação</button>`
-              : `<button class="btn btn-xs btn-danger" onclick="adminSetSubscriptionBan('${u.id}', true)">Bloquear renovação</button>`
-            }
-            ${state.currentUser?.isAdmin ? `<button class="btn btn-xs btn-secondary" onclick="adminVerifyUserAge('${u.id}')">${u.adultAgeVerified?'Revogar idade':'Verificar +19'}</button>` : ''}
-            <button class="btn btn-xs btn-secondary" onclick="adminViewUserChats('${u.id}')">Ver chats</button>
             ${u.id !== state.currentUser.id ? `<button class="btn btn-xs btn-danger" onclick="showAdminDeleteUserModal('${u.id}')" title="Excluir usuário">🗑️ Excluir</button>` : ''}
             ${u.bannedUntil && Date.now() < u.bannedUntil
               ? `<button class="btn btn-xs btn-secondary" onclick="unbanUser('${u.id}')">Desbanir</button>`
