@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.4';
+const EMMA_APP_VERSION = '0.7.5';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -188,7 +188,17 @@ async function acceptLegalPolicies(button) {
 async function emmaApi(action, payload = {}) {
   if (state.currentUser && Date.now() - emmaLastActivityAt >= EMMA_SESSION_LIMIT_MS) { await expireEmmaSession(); throw new Error('Sessão expirada por inatividade.'); }
   if (!emmaSupabase) throw new Error('O serviço de autenticação não carregou. Atualize a página.');
-  const { data, error } = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
+  let data = null, error = null;
+  // Falhas de rede podem ocorrer antes de a requisição chegar à Edge Function.
+  // Repetir com o mesmo payload/messageId é seguro: o backend trata IDs duplicados.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = await emmaSupabase.functions.invoke('emma-api', { body: { action, ...payload } });
+    data = result.data; error = result.error;
+    if (!error) break;
+    const networkFailure = /failed to send a request|fetch failed|networkerror|network request failed|load failed/i.test(String(error.message || ''));
+    if (!networkFailure || attempt === 2) break;
+    await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+  }
   if (error) {
     let message = data?.error || '';
     if (!message && error.context && typeof error.context.clone === 'function') {
