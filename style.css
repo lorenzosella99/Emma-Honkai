@@ -1393,3 +1393,65 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 .character-creation-request-status{margin-top:10px;padding:10px;border-radius:10px;background:var(--bg-3);border:1px solid var(--border)}
 
 .chat-model-bar{display:grid;grid-template-columns:auto minmax(150px,240px);align-items:center;gap:6px 10px;padding:8px clamp(14px,4vw,52px);border-bottom:1px solid var(--border);background:var(--bg-2)}.chat-model-bar label{font-size:.78rem;color:var(--text-2);font-weight:700}.chat-model-bar select{min-width:0;padding:7px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg-3);color:var(--text-1);font:inherit;font-size:.82rem}.chat-model-bar small{grid-column:1/-1;color:var(--text-3);font-size:.72rem}.chat-model-bar.hidden{display:none}
+
+/* Seletor de IA compacto */
+.chat-model-bar{
+ display:flex;
+ flex-wrap:wrap;
+ align-items:center;
+ gap:6px 9px;
+ padding:5px 12px;
+ min-height:0;
+ background:linear-gradient(110deg,var(--bg-2),var(--bg-3));
+ border-bottom:1px solid var(--border);
+}
+.chat-model-bar label{
+ flex:0 0 auto;
+ display:inline-flex;
+ align-items:center;
+ gap:5px;
+ margin:0;
+ color:var(--text-2);
+ font-size:.7rem;
+ line-height:1.2;
+ font-weight:800;
+ letter-spacing:.02em;
+}
+.chat-model-bar label::before{content:"✦";color:var(--accent-2);font-size:.75rem}
+.chat-model-bar select{
+ flex:0 1 205px;
+ width:auto;
+ min-width:0;
+ max-width:100%;
+ padding:5px 28px 5px 9px;
+ border:1px solid color-mix(in srgb,var(--accent-2) 28%,var(--border));
+ border-radius:999px;
+ background:var(--bg-1);
+ color:var(--text-1);
+ font:600 .73rem/1.25 inherit;
+ font-size:.73rem;
+ outline:none;
+}
+.chat-model-bar select:focus-visible{border-color:var(--accent-2);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-2) 18%,transparent)}
+.chat-model-bar small{
+ flex:1 1 100%;
+ min-width:0;
+ margin:0;
+ padding-left:2px;
+ color:var(--text-3);
+ font-size:.65rem;
+ line-height:1.25;
+ white-space:nowrap;
+ overflow:hidden;
+ text-overflow:ellipsis;
+}
+.chat-model-bar.hidden{display:none}
+@media(min-width:560px){
+ .chat-model-bar{flex-wrap:nowrap;padding:5px 16px}
+ .chat-model-bar small{flex:1 1 auto}
+}
+@media(max-width:380px){
+ .chat-model-bar{gap:5px 7px;padding:5px 9px}
+ .chat-model-bar select{flex-basis:175px;font-size:.69rem}
+ .chat-model-bar small{font-size:.62rem}
+}
