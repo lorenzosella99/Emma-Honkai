@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.2';
+const EMMA_APP_VERSION = '0.7.3';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1543,7 +1543,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
   revealedSensitiveCharacters.delete(String(charId));
   if (createNew && !isPremiumActive()) return toast('Criar várias conversas com o mesmo personagem é um benefício Emma Premium.', 'error');
   const requestKey = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-  const localChats = DB.get('chats', []).filter(c => c.userId === state.currentUser.id && c.charId === charId);
+  const localChats = DB.get('chats', []).filter(c => c.charId === charId && (c.userId === state.currentUser.id || char.ownerUserId === state.currentUser.id));
   const localChat = requestedChatId
     ? localChats.find(c => c.id === requestedChatId)
     : localChats.sort((a,b) => (b.createdAt||b.lastTime||0) - (a.createdAt||a.lastTime||0))[0];
@@ -1573,6 +1573,7 @@ async function openChat(charId, requestedChatId = null, createNew = false) {
     const chats = DB.get('chats', []).filter(c => c.id !== chat.id);
     chats.push(chat); DB.set('chats', chats);
     state.currentChat.chatId = chat.id;
+    state.currentChat.userId = chat.userId;
     await emmaSupabase.from('chats').update({ unread: 0 }).eq('id', chat.id);
     el('chat-input').disabled = false;
     el('chat-input').placeholder = 'Escreva algo...';
