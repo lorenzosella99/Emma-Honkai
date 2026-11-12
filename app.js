@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.7';
+const EMMA_APP_VERSION = '0.7.8';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -304,7 +304,7 @@ async function loadEmmaBackendState() {
     }
   }
 
-  const allProfiles = profiles.some(p => p.id === ownProfile.id) ? profiles : [...profiles, ownProfile];
+  const allProfiles = [...profiles.filter(p => p.id !== ownProfile.id), ownProfile];
   const users = allProfiles.map(profileToAppUser);
   const characters = charactersRows.map(c => ({
     id:c.id, name:c.name, role:c.role_name || '', image:c.image || '', lore:c.lore || '', isPhotosensitive:!!c.is_photosensitive, description:c.description || '', storyIntro:c.story_intro || '', ageYears:c.age_years ?? null, heightCm:c.height_cm ?? null, weightKg:c.weight_kg ?? null,
@@ -1251,27 +1251,23 @@ const legacyBannerMigrationInFlight = new Set();
 async function migrateLegacyProfileBanner(user){
   if(!user?.id||!emmaSupabase||legacyBannerMigrationInFlight.has(user.id))return;
   legacyBannerMigrationInFlight.add(user.id);
-  const key='emma_profile_banner_'+user.id;
-  let legacy='';
-  try{legacy=localStorage.getItem(key)||'';}catch{return;}
-  if(!legacy)return;
-  if(user.bannerUrl){try{localStorage.removeItem(key);}catch{}return;}
-  if(!legacy.startsWith('data:image/'))return;
   try{
-    const response=await fetch(legacy);
-    if(!response.ok)throw new Error('Não foi possível ler o banner antigo.');
-    const blob=await response.blob();
-    const path=user.id+'/banner.webp';
-    const upload=await emmaSupabase.storage.from('profile-banners').upload(path,blob,{contentType:blob.type||'image/webp',upsert:true,cacheControl:'3600'});
-    if(upload.error)throw upload.error;
-    const publicUrl=emmaSupabase.storage.from('profile-banners').getPublicUrl(path).data?.publicUrl;
-    if(!publicUrl)throw new Error('Endereço do banner não retornado.');
-    const update=await emmaSupabase.from('profiles').update({banner_url:publicUrl}).eq('id',user.id);
-    if(update.error)throw update.error;
-    user.bannerUrl=publicUrl;
+    const key='emma_profile_banner_'+user.id;
+    let legacy='';try{legacy=localStorage.getItem(key)||'';}catch{return;}
+    if(!legacy)return;
+    if(user.bannerUrl){try{localStorage.removeItem(key);}catch{}return;}
+    if(!legacy.startsWith('data:image/'))return;
+    const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=legacy;});
+    const canvas=document.createElement('canvas'),scale=Math.min(1,1600/image.width,520/image.height);
+    canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+    const context=canvas.getContext('2d');if(!context)throw new Error('Não foi possível processar o banner antigo.');
+    context.drawImage(image,0,0,canvas.width,canvas.height);
+    const imageData=canvas.toDataURL('image/webp',.78);
+    const saved=await emmaApi('profile_save_banner',{imageData});
+    user.bannerUrl=saved.bannerUrl;
     try{localStorage.removeItem(key);}catch{}
     const users=DB.get('users',[]),own=users.find(u=>u.id===user.id);
-    if(own)own.bannerUrl=publicUrl;
+    if(own)own.bannerUrl=saved.bannerUrl;
     DB.set('users',users);
     const banner=el('profile-banner');if(banner)banner.style.cssText=getProfileBannerStyle(user.id);
   }catch(error){console.warn('Migração do banner antigo:',error);}
@@ -1305,14 +1301,9 @@ async function handleProfileBannerUpload(input){
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.78));
     if(!blob)throw new Error('Não foi possível compactar a imagem.');
     if(blob.size>6*1024*1024)throw new Error('A imagem compactada excede 6 MB.');
-    const path=user.id+'/banner.webp';
-    const upload=await emmaSupabase.storage.from('profile-banners').upload(path,blob,{contentType:'image/webp',upsert:true,cacheControl:'3600'});
-    if(upload.error)throw upload.error;
-    const publicData=emmaSupabase.storage.from('profile-banners').getPublicUrl(path).data;
-    const publicUrl=publicData?.publicUrl;
-    if(!publicUrl)throw new Error('O armazenamento não retornou o endereço da imagem.');
-    const profileUpdate=await emmaSupabase.from('profiles').update({banner_url:publicUrl}).eq('id',user.id);
-    if(profileUpdate.error)throw profileUpdate.error;
+    const saved=await emmaApi('profile_save_banner',{imageData:compact});
+    const publicUrl=saved.bannerUrl;
+    if(!publicUrl)throw new Error('O servidor não retornou o endereço do banner.');
     user.bannerUrl=publicUrl;
     try{localStorage.removeItem('emma_profile_banner_'+user.id);}catch{}
     const users=DB.get('users',[]);const own=users.find(u=>u.id===user.id);if(own)own.bannerUrl=publicUrl;DB.set('users',users);
