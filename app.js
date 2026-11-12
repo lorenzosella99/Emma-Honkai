@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.1';
+const EMMA_APP_VERSION = '0.6.2';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1597,6 +1597,23 @@ async function resetCurrentChat() {
   }
 }
 
+const EMMA_CHAT_MODEL_KEY='emma_chat_ai_model_';
+function getChatAiModel(chatId=state.currentChat?.chatId){return localStorage.getItem(EMMA_CHAT_MODEL_KEY+String(chatId||''))==='venice'?'venice':'main';}
+function setChatAiModel(model){
+ const chatId=state.currentChat?.chatId;if(!chatId)return;
+ const selected=model==='venice'?'venice':'main';
+ if(selected==='venice'&&!isPremiumActive()){toast('O modelo Venice é exclusivo do VIP ativo.','error');model='main';}
+ const value=model==='venice'?'venice':'main';
+ localStorage.setItem(EMMA_CHAT_MODEL_KEY+chatId,value);
+ const select=el('chat-ai-model');if(select)select.value=value;
+ const desc=el('chat-ai-model-description');if(desc)desc.textContent=value==='venice'?'Modelo Dolphin Mistral 24B com menos recusas padrão; sujeito a limites gratuitos.':'Modelo principal da Emma, equilibrado para roleplay.';
+}
+function refreshChatAiModelSelector(){
+ const bar=el('chat-model-bar');if(!bar)return;
+ const visible=isPremiumActive()&&state.currentChat?.char?.ownerUserId!==state.currentUser?.id;
+ bar.classList.toggle('hidden',!visible);
+ if(visible){const value=getChatAiModel();const select=el('chat-ai-model');if(select)select.value=value;const desc=el('chat-ai-model-description');if(desc)desc.textContent=value==='venice'?'Dolphin Mistral 24B: menos recusas padrão, com limites do plano gratuito.':'Modelo principal da Emma: equilibrado e padrão.';}
+}
 function renderChatScreen(char, chat) {
   cancelChatReply();
   const statusText = char.isOnline ? 'Online' : 'Offline · Bot respondendo';
@@ -1646,6 +1663,7 @@ function renderChatScreen(char, chat) {
   }
 
   updateCostHints();
+  refreshChatAiModelSelector();
   loadMessages();
   el('chat-input').focus();
 }
@@ -1969,7 +1987,7 @@ async function botRespond(typingEl = null, alreadyTyping = false) {
     const userText = lastUserMsg?.text || '';
     let ordered;
     try {
-      const aiReply = await emmaApi('generate_character_reply', { chatId: activeChat.chatId });
+      const aiReply = await emmaApi('generate_character_reply', { chatId: activeChat.chatId, aiModel:getChatAiModel(activeChat.chatId) });
       const generatedText = String(aiReply?.text || '').trim();
       if (!generatedText) throw new Error('A IA retornou uma resposta vazia.');
       if (!aiReply?.id) throw new Error('A resposta da IA não confirmou o salvamento no servidor.');
@@ -2414,6 +2432,8 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.1',title:'Criação de personagens com aprovação administrativa',items:['Criadores podem enviar fichas de personagens para aprovação do Admin principal.','Painel Admin com fila de solicitações para aprovar ou recusar.','Limite de até 50 personagens criados por conta e auditoria das decisões.']},
+    {version:'0.6.0',title:'Banners de perfil e comunidade de criadores',items:['Personalização do banner de perfil.','Nova área para descobrir personagens criados pela comunidade.']},
     {version:'0.5.45',title:'Todos os códigos na aba Admin',items:['A aba Admin agora mostra os códigos de usuário, Vice-admin e Admin.','Cada código tem botão para copiar e exibe sua validade.','Os códigos continuam visíveis somente para o Admin principal.']},
     {version:'0.5.44',title:'Códigos permanentes e temporários de administrador',items:['O Admin principal agora possui um código permanente de recuperação e um código temporário exclusivo para o dia seguinte.','Os códigos ficam disponíveis na aba Admin, com validade e botão para copiar.','A autenticação separa os códigos administrativos dos convites de cadastro e exige usuário e função correspondentes.']},
     {version:'0.5.43',title:'Missões de reações emocionais',items:['Os desafios diários agora pedem reações específicas: paixão, compaixão, raiva, confiança, diversão, ciúmes ou admiração.','A conclusão é avaliada no servidor, verificando se a própria personagem demonstrou a reação no roleplay.','Continuam necessárias pelo menos 5 mensagens do jogador e 5 respostas da personagem no dia.']},
