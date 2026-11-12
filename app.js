@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.0';
+const EMMA_APP_VERSION = '0.6.1';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2230,11 +2230,15 @@ function renderProfileTab(container) {
       ` : ''}
       <div class="admin-section" style="margin:14px 16px;padding:16px">
         <b>🌟 Área de personagem</b>
+        <div class="admin-row-sub" style="margin:8px 0">Crie seu próprio personagem. Ele só será publicado depois da aprovação do administrador.</div>
+        <button class="btn btn-primary btn-full" onclick="showAddCharModal()">＋ Criar personagem</button>
+        <div id="my-character-creation-request" class="admin-row-sub" style="margin-top:10px">Verificando solicitações…</div>
+        <script></script>
         ${myCharacters.length ? `<div class="admin-row-sub" style="margin:8px 0">Você controla ${myCharacters.length} personagem(ns).</div>
           <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" ${user.allowBotTakeover ? 'checked' : ''} onchange="setBotTakeover(this.checked)"> Permitir que o bot assuma quando eu estiver offline</label>
           ${myCharacters.map(ch => `<div class="admin-row" style="margin:10px 0;align-items:center"><div class="admin-row-info"><b>${escapeHtml(ch.name)}</b><div class="admin-row-sub">${myCharacterChats.filter(chat => chat.charId === ch.id).length} conversa(s) recebida(s)</div></div></div><div id="character-inbox-${escapeHtml(ch.id)}"></div>`).join('')}
           <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="requestCharacterRole()">Solicitar outro personagem</button>
-          <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="showAddCharModal()">+ Criar personagem</button>
+ 
           ${user.characterRequest?.status === 'pending' ? '<div class="admin-row-sub" style="margin-top:8px">Sua solicitação adicional está em análise.</div><span class="chip chip-gold">Em análise</span>' : ''}`
         : user.characterRequest?.status === 'pending'
           ? '<div class="admin-row-sub" style="margin:8px 0">Solicitação enviada. Aguarde o administrador escolher seu personagem.</div><span class="chip chip-gold">Em análise</span>'
@@ -2268,6 +2272,8 @@ function renderProfileTab(container) {
 
 
 let discordImportDraft=null;
+  loadMyCharacterCreationRequest();
+
 function parseDiscordHistory(raw){
  const lines=String(raw||'').replace(/\r/g,'').split('\n');const out=[];let cur=null,pendingSpeaker=null;
  const dateRe=/(\d{1,2}\/\d{1,2}\/\d{4},\s*\d{1,2}:\d{2})/;
@@ -2992,6 +2998,29 @@ async function adminGenerateDailyChallenge(button) {
   }
 }
 
+
+async function loadCharacterCreationRequests(){
+  const target=el('admin-character-creation-requests');if(!target)return;
+  try{
+    const {requests=[]}=await emmaApi('admin_list_character_creation_requests',{});
+    target.innerHTML=requests.length?requests.map(r=>{
+      const d=r.characterData||{},summary=[d.role,d.gender==='female'?'Feminino':d.gender==='male'?'Masculino':'Outro',d.ageYears!=null?' '+d.ageYears+' anos':''].filter(Boolean).join(' · ');
+      return '<div class="admin-row" style="align-items:flex-start"><div class="admin-row-info"><b>'+escapeHtml(d.name||'Sem nome')+'</b><div class="admin-row-sub">Criador: '+escapeHtml(r.username||'Usuário')+' · '+escapeHtml(formatDate(Date.parse(r.createdAt)))+'</div><div class="admin-row-sub">'+escapeHtml(summary)+'</div><div class="admin-row-sub">'+escapeHtml(String(d.description||'').slice(0,500))+'</div><div class="admin-row-sub">'+escapeHtml(String(d.storyIntro||'').slice(0,350))+'</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="reviewCharacterCreationRequest(\''+r.id+'\',true)">Aprovar</button><button class="btn btn-danger btn-sm" onclick="reviewCharacterCreationRequest(\''+r.id+'\',false)">Recusar</button></div></div>';
+    }).join(''):'Nenhum pedido pendente.';
+  }catch(e){target.textContent='Não foi possível carregar os pedidos: '+e.message;}
+}
+async function reviewCharacterCreationRequest(requestId,approve){
+  if(!state.currentUser?.isAdmin)return toast('Somente o administrador principal pode aprovar personagens.','error');
+  try{await emmaApi('admin_review_character_creation_request',{requestId,approve});toast(approve?'Personagem aprovado e publicado!':'Solicitação recusada.','success');await loadEmmaBackendState();renderAdminPanel();}catch(e){toast(e.message,'error');}
+}
+async function loadMyCharacterCreationRequest(){
+  const target=el('my-character-creation-request');if(!target)return;
+  try{const {request}=await emmaApi('creator_get_character_creation_request',{});if(!request){target.textContent='Você ainda não enviou um pedido.';return;}
+  const labels={pending:'Aguardando aprovação do administrador',approved:'Personagem aprovado e publicado',rejected:'Pedido recusado. Você pode enviar outro.'};
+  target.innerHTML='<span class="chip '+(request.status==='pending'?'chip-gold':'')+'">'+labels[request.status]+'</span>'+(request.status==='rejected'&&request.reviewNote?'<div>'+escapeHtml(request.reviewNote)+'</div>':'');
+  }catch(e){target.textContent='';}
+}
+
 function renderAdminPanel() {
   const container = el('admin-content');
   if (container) { delete container.dataset.adminSubview; delete container.dataset.userId; }
@@ -3012,6 +3041,10 @@ function renderAdminPanel() {
       <div id="admin-daily-challenge-result" class="admin-row-sub" style="margin-top:10px"></div>
     </div>` : ''}
     ${state.currentUser?.isAdmin ? '<div class="admin-section"><div class="admin-section-header">🔑 Códigos de acesso do Admin</div><div class="admin-row-sub">Código permanente para recuperação e código temporário já preparado para amanhã.</div><div id="admin-access-codes-output" class="admin-row-sub" style="margin-top:10px">Carregando códigos…</div><button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="loadAdminAccessCodes()">Atualizar códigos</button></div>' : ''}
+    <div class="admin-section">
+      <div class="admin-section-header">📝 Pedidos para criar personagens</div>
+      <div id="admin-character-creation-requests" class="admin-row-sub">Carregando pedidos…</div>
+    </div>
     <div class="admin-section">
       <div class="admin-section-header">🌟 Solicitações para controlar personagens (${characterRequests.length})</div>
       ${characterRequests.map(u => `<div class="admin-row"><div class="admin-row-info"><b>${escapeHtml(u.username)}</b><div class="admin-row-sub">Solicitado em ${formatDate(u.characterRequest.requestedAt)}</div></div><select class="input" id="assign-char-${u.id}" style="max-width:170px"><option value="">Escolher personagem</option>${chars.filter(c => c.controlMode !== 'bot' && (!c.ownerUserId || c.ownerUserId === u.id)).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="adminAssignCharacter('${u.id}')">Atribuir</button><button class="btn btn-secondary btn-sm" onclick="adminRejectCharacterRequest('${u.id}')">Recusar</button></div>`).join('') || '<div class="admin-row-sub">Nenhuma solicitação pendente.</div>'}
@@ -3181,6 +3214,7 @@ function renderAdminPanel() {
   });
   applyViceAdminPanelVisibility(container);
   if (state.currentUser?.isAdmin) loadAdminAccessCodes();
+  loadCharacterCreationRequests();
 }
 
 function showAdminDeleteCharacterModal(characterId) {
@@ -3384,7 +3418,7 @@ async function deleteMission(missionId) {
 function showAddCharModal(editId = null) {
   const chars = DB.get('characters', []);
   const char = editId ? chars.find(c => c.id === editId) : null;
-  const creatorMode = !editId && state.currentUser?.userType === 'character' && !canAdminPermission('edit_characters');
+  const creatorMode = !editId && !canAdminPermission('edit_characters');
   if (editId ? !canEditCharacter(char) : (!creatorMode && !canAdminPermission('edit_characters'))) return toast('Você não tem permissão para modificar este tipo de personagem.', 'error');
   const imgSrc = char?.image || '';
   const overlay = document.createElement('div');
@@ -3434,7 +3468,11 @@ function showAddCharModal(editId = null) {
     </div>
   `;
   document.body.appendChild(overlay);
-  if (creatorMode) { el('cf-is-vip')?.closest('.field')?.remove(); el('cf-control-mode')?.closest('.field')?.remove(); }
+  if (creatorMode) {
+    el('cf-is-vip')?.closest('.field')?.remove(); el('cf-control-mode')?.closest('.field')?.remove();
+    const title=overlay.querySelector('.modal-title');if(title)title.textContent='＋ Solicitar criação de personagem';
+    const save=overlay.querySelector('.modal-actions .btn-primary');if(save)save.textContent='Enviar para aprovação';
+  }
 }
 
 let charImageProcessing = false;
@@ -3604,10 +3642,15 @@ async function saveChar(editId, btn, creatorMode = false) {
   }
   const saved = chars.find(c => c.id === (editId || chars[chars.length-1].id));
   try {
-    if (creatorMode) await emmaApi('creator_create_character', {character:saved});
-    else await emmaApi('admin_save_character', {character:saved});
-    DB.set('characters', chars); overlay.remove(); toast(creatorMode ? 'Seu personagem foi criado!' : 'Personagem salvo no servidor!', 'success');
-    await loadEmmaBackendState(); if (creatorMode) switchTab('profile'); else renderAdminPanel();
+    if (creatorMode) {
+      const result=await emmaApi('creator_submit_character_request',{character:saved});
+      overlay.remove();toast('Solicitação enviada! Aguarde a aprovação do administrador.','success');
+      const status=el('my-character-creation-request');if(status)status.innerHTML='<span class="chip chip-gold">Solicitação aguardando aprovação</span>';
+      return;
+    }
+    await emmaApi('admin_save_character', {character:saved});
+    DB.set('characters', chars); overlay.remove(); toast('Personagem salvo no servidor!', 'success');
+    await loadEmmaBackendState(); renderAdminPanel();
   } catch(e) { toast('Não foi possível salvar o personagem: ' + e.message, 'error'); }
 }
 
