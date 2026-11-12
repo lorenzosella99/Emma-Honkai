@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.6.2';
+const EMMA_APP_VERSION = '0.6.3';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1598,21 +1598,28 @@ async function resetCurrentChat() {
 }
 
 const EMMA_CHAT_MODEL_KEY='emma_chat_ai_model_';
-function getChatAiModel(chatId=state.currentChat?.chatId){return localStorage.getItem(EMMA_CHAT_MODEL_KEY+String(chatId||''))==='venice'?'venice':'main';}
+function getChatAiModel(chatId=state.currentChat?.chatId){
+ const saved=localStorage.getItem(EMMA_CHAT_MODEL_KEY+String(chatId||''));
+ return ['main','venice','nemotron'].includes(saved)?saved:'main';
+}
 function setChatAiModel(model){
  const chatId=state.currentChat?.chatId;if(!chatId)return;
- const selected=model==='venice'?'venice':'main';
- if(selected==='venice'&&!isPremiumActive()){toast('O modelo Venice é exclusivo do VIP ativo.','error');model='main';}
- const value=model==='venice'?'venice':'main';
+ let value=['main','venice','nemotron'].includes(model)?model:'main';
+ if(value==='venice'&&!isPremiumActive()){toast('O modelo Venice é exclusivo do VIP ativo.','error');value='main';}
  localStorage.setItem(EMMA_CHAT_MODEL_KEY+chatId,value);
  const select=el('chat-ai-model');if(select)select.value=value;
- const desc=el('chat-ai-model-description');if(desc)desc.textContent=value==='venice'?'Modelo Dolphin Mistral 24B com menos recusas padrão; sujeito a limites gratuitos.':'Modelo principal da Emma, equilibrado para roleplay.';
+ const descriptions={main:'Qwen 3.8 27B gratuito pelo OpenRouter.',venice:'Venice Uncensored gratuito; disponível para VIP.',nemotron:'Nemotron 3 Ultra gratuito; evite enviar dados pessoais ou confidenciais.'};
+ const desc=el('chat-ai-model-description');if(desc)desc.textContent=descriptions[value];
 }
 function refreshChatAiModelSelector(){
  const bar=el('chat-model-bar');if(!bar)return;
- const visible=isPremiumActive()&&state.currentChat?.char?.ownerUserId!==state.currentUser?.id;
+ const visible=!!state.currentChat&&state.currentChat?.char?.ownerUserId!==state.currentUser?.id;
  bar.classList.toggle('hidden',!visible);
- if(visible){const value=getChatAiModel();const select=el('chat-ai-model');if(select)select.value=value;const desc=el('chat-ai-model-description');if(desc)desc.textContent=value==='venice'?'Dolphin Mistral 24B: menos recusas padrão, com limites do plano gratuito.':'Modelo principal da Emma: equilibrado e padrão.';}
+ if(visible){
+  const value=getChatAiModel();const select=el('chat-ai-model');if(select)select.value=value;
+  const descriptions={main:'Qwen 3.8 27B gratuito pelo OpenRouter.',venice:'Venice Uncensored gratuito; disponível para VIP.',nemotron:'Nemotron 3 Ultra gratuito; evite enviar dados pessoais ou confidenciais.'};
+  const desc=el('chat-ai-model-description');if(desc)desc.textContent=descriptions[value];
+ }
 }
 function renderChatScreen(char, chat) {
   cancelChatReply();
@@ -2432,6 +2439,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.6.3',title:'Três modelos OpenRouter por conversa',items:['Adicionadas opções Qwen 3.8 27B, Venice Uncensored e Nemotron 3 Ultra.','Qwen e Nemotron podem ser escolhidos por todos; Venice continua exclusivo do VIP.','Cada conversa salva seu modelo e o servidor tenta modelos alternativos se o selecionado falhar.']},
     {version:'0.6.2',title:'Modelo VIP gratuito e seletor de IA',items:['Assinantes VIP podem escolher entre a IA principal e Venice Uncensored gratuito pelo OpenRouter.','Se o modelo VIP estiver indisponível, o servidor tenta automaticamente a IA principal e depois o fallback configurado.','O seletor fica acima das mensagens e a escolha é salva por conversa.']},
     {version:'0.6.1',title:'Criação de personagens com aprovação administrativa',items:['Criadores podem enviar fichas de personagens para aprovação do Admin principal.','Painel Admin com fila de solicitações para aprovar ou recusar.','Limite de até 50 personagens criados por conta e auditoria das decisões.']},
     {version:'0.6.0',title:'Banners de perfil e comunidade de criadores',items:['Personalização do banner de perfil.','Nova área para descobrir personagens criados pela comunidade.']},
