@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.0';
+const EMMA_APP_VERSION = '0.8.1';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1776,7 +1776,7 @@ function renderChatScreen(char, chat) {
   if (botsButton) botsButton.classList.toggle('hidden', controllerView);
   if (newChatButton) newChatButton.classList.toggle('hidden', controllerView || !isPremiumActive());
   if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
-  if (privateBotButton) privateBotButton.classList.toggle('hidden', controllerView || !state.currentChat?.chatId);
+  if (privateBotButton) privateBotButton.classList.toggle('hidden', controllerView || !state.currentChat?.chatId || char.controlMode === 'users');
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
   const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !!char.image;
   const backgroundImage = controllerView
@@ -1789,6 +1789,17 @@ function renderChatScreen(char, chat) {
     el('chat-messages')?.style.setProperty('--chat-character-bg', chatBackgroundValue);
   }
 
+  const formatHint=el('screen-chat')?.querySelector('.chat-format-hint');
+  const costHints=el('screen-chat')?.querySelector('.thought-cost-hint');
+  if(controllerView){
+    if(formatHint)formatHint.textContent='Você está respondendo como '+char.name+'. Suas mensagens serão enviadas em nome do personagem.';
+    if(costHints)costHints.classList.add('hidden');
+    const input=el('chat-input');if(input)input.placeholder='Responder como '+char.name+'…';
+  }else{
+    if(formatHint)formatHint.textContent='Fala: texto normal · Ação: *texto* · Pensamento: "texto" ou <texto>.';
+    if(costHints)costHints.classList.remove('hidden');
+    const input=el('chat-input');if(input)input.placeholder='Escreva algo…';
+  }
   updateCostHints();
   refreshChatAiModelSelector();
   loadMessages();
@@ -2074,6 +2085,10 @@ async function requestPrivateBotReply() {
   const active=state.currentChat;
   if(!active?.chatId||!active.char)return toast('Abra uma conversa primeiro.','error');
   if(active.char.ownerUserId===state.currentUser?.id)return toast('Esta é uma conversa do seu próprio personagem.','error');
+  if(active.char.controlMode==='users')return toast('Este personagem está configurado para responder somente pelo controlador. Peça ao dono para alterar o modo de controle.','error',6000);
+  const owner=active.char.ownerUserId?DB.get('users',[]).find(u=>u.id===active.char.ownerUserId):null;
+  const ownerOnline=!!(owner&&Date.now()-Number(owner.lastSeenAt||0)<120000);
+  if(active.char.controlMode!=='bot'&&owner&&ownerOnline&&!owner.allowBotTakeover)return toast('O controlador está online e não autorizou o modo automático.','error',6000);
   if(state.isTyping)return;
   const button=el('chat-bot-reply-btn');
   if(button){button.disabled=true;button.textContent='🤖 Preparando resposta…';}
@@ -2082,7 +2097,7 @@ async function requestPrivateBotReply() {
     active.hiddenFromOwner=true;
     const chats=DB.get('chats',[]),local=chats.find(c=>c.id===active.chatId);
     if(local){local.hiddenFromOwner=true;DB.set('chats',chats);}
-    toast('Conversa privada ativada. O dono do personagem não verá este chat.','success',3500);
+    toast('Conversa privada ativada.','success',3000);
     await botRespond(null,false,true);
   }catch(error){
     toast(error.message||'Não foi possível solicitar a resposta privada.','error',6000);
@@ -2749,14 +2764,19 @@ async function updateUserPresence() {
 
 function renderCharacterInbox(container, character, chats) {
   if (!container) return;
-  const users = DB.get('users', []), messages = DB.get('messages', {});
-  container.innerHTML = chats.sort((x,y)=>(y.lastTime||0)-(x.lastTime||0)).map(chat => {
-    const player = users.find(u => u.id === chat.userId);
-    const last = (messages[chat.id] || []).slice(-1)[0];
-    const preview = last?.text || chat.lastMessage || 'Sem mensagens';
+  const users=DB.get('users',[]),messages=DB.get('messages',{});
+  const ordered=[...chats].sort((a,b)=>(b.lastTime||0)-(a.lastTime||0));
+  container.innerHTML=ordered.map(chat=>{
+    const player=users.find(u=>u.id===chat.userId);
+    const last=(messages[chat.id]||[]).slice(-1)[0];
+    const preview=last?.text||chat.lastMessage||'Sem mensagens';
     const unread=Number(chat.ownerUnread||0);
-    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')} ${unread>0?`<span class="chat-unread" title="${unread} mensagem(ns) nova(s)">${unread}</span>`:''}</b><div class="admin-row-sub">${escapeHtml(preview)}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Abrir conversa</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
-  }).join('') || '<div class="admin-row-sub">As conversas dos jogadores aparecerão aqui.</div>';
+    return `<article class="owner-chat-card">
+      <div class="owner-chat-card-main"><div class="owner-chat-card-title">${escapeHtml(player?.username||'Jogador')}${unread?'<span class="chat-unread">'+unread+'</span>':''}</div>
+      <div class="owner-chat-card-preview">${escapeHtml(preview)}</div><time>${timeAgo(chat.lastTime)}</time></div>
+      <div class="owner-chat-card-actions"><button class="btn btn-primary btn-sm" onclick="replyAsCharacter('${chat.id}')">Responder</button><button class="btn btn-secondary btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>
+    </article>`;
+  }).join('')||'<div class="owner-chat-empty">As conversas recebidas aparecerão aqui.</div>';
 }
 
 async function replyAsCharacter(chatId) {
