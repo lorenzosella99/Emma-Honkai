@@ -2703,7 +2703,8 @@ function renderCharacterInbox(container, character, chats) {
   container.innerHTML = chats.sort((x,y)=>(y.lastTime||0)-(x.lastTime||0)).map(chat => {
     const player = users.find(u => u.id === chat.userId);
     const last = (messages[chat.id] || []).slice(-1)[0];
-    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')}</b><div class="admin-row-sub">${escapeHtml(last?.text || 'Sem mensagens')}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Abrir conversa</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
+    const preview = last?.text || chat.lastMessage || 'Sem mensagens';
+    return `<div class="admin-row" style="align-items:center;gap:10px"><div class="admin-row-info"><b>${escapeHtml(player?.username || 'Jogador')}</b><div class="admin-row-sub">${escapeHtml(preview)}</div></div><button class="btn btn-secondary btn-sm" onclick="replyAsCharacter('${chat.id}')">Abrir conversa</button><button class="btn btn-danger btn-sm" onclick="reportChatPlayer('${chat.id}')">Denunciar</button></div>`;
   }).join('') || '<div class="admin-row-sub">As conversas dos jogadores aparecerão aqui.</div>';
 }
 
