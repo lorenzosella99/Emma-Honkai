@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.7.9';
+const EMMA_APP_VERSION = '0.8.0';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1301,8 +1301,9 @@ async function handleProfileBannerUpload(input){
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.78));
     if(!blob)throw new Error('Não foi possível compactar a imagem.');
     if(blob.size>6*1024*1024)throw new Error('A imagem compactada excede 6 MB.');
-    const compact=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Não foi possível preparar o banner.'));reader.readAsDataURL(blob);});
-    const saved=await emmaApi('profile_save_banner',{imageData:compact});
+    const bannerData=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(new Error('Não foi possível preparar o banner.'));reader.readAsDataURL(blob);});
+    if(!bannerData.startsWith('data:image/webp;base64,'))throw new Error('A imagem WebP não foi preparada corretamente.');
+    const saved=await emmaApi('profile_save_banner',{imageData:bannerData});
     const publicUrl=saved.bannerUrl;
     if(!publicUrl)throw new Error('O servidor não retornou o endereço do banner.');
     user.bannerUrl=publicUrl;
