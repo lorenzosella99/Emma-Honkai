@@ -1462,3 +1462,6 @@ body.premium-theme .nav-btn.active,body.premium-theme .btn-primary { background:
 #chars-grid-players .creator-compact-characters{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 #chars-grid-players .creator-compact-character{max-width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg-2);color:var(--text-2);font:500 .7rem var(--font);cursor:pointer;overflow-wrap:anywhere}
 #chars-grid-players .creator-compact-character:active{background:var(--surface-2)}
+
+/* Cada criador ocupa uma linha completa: usuário, personagens e depois o próximo usuário */
+#chars-grid-players .creator-compact-group{grid-column:1 / -1;width:100%;display:block}
