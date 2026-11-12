@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.5';
+const EMMA_APP_VERSION = '0.8.6';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1561,30 +1561,32 @@ function renderPlayerGrid(container, players, pref='all') {
   container.querySelectorAll('[data-creator-user-id]').forEach(button=>button.addEventListener('click',()=>openCreatorProfile(button.dataset.creatorUserId)));
 }
 function openCreatorProfile(userId) {
-  const creator=creatorDirectoryCache.find(c=>String(c.userId||c.id)===String(userId));
+  const entries=creatorDirectoryCache.filter(c=>String(c.userId||c.id)===String(userId)),creator=entries[0];
   if(!creator)return toast('Perfil do criador não encontrado. Atualize a aba e tente novamente.','error');
-  const chars=DB.get('characters',[]).filter(c=>String(c.ownerUserId)===String(userId)&&!c.isBanned);
-  const avatar=safeImageUrl(creator.avatar||creator.character?.image||'');
-  const level=Math.max(1,Number(creator.creatorLevel||creator.creator_level||creator.level||1));
-  const following=!!(creator.following||creator.isFollowing||creator.is_following);
-  const isSelf=String(userId)===String(state.currentUser?.id);
+  const characters=entries.map(x=>x.character).filter(c=>c&&!c.isBanned),visible=creator.detailsVisible!==false;
+  const avatar=visible?safeImageUrl(creator.avatar||''):'',banner=visible?safeImageUrl(creator.bannerUrl||''):'';
+  const level=Math.max(1,Number(creator.level||1)),xp=Math.max(0,Number(creator.xp||0)),following=!!creator.following;
+  const isSelf=String(userId)===String(state.currentUser?.id),online=Number(creator.lastSeenAt||0)>Date.now()-120000;
+  const joined=creator.createdAt?new Date(creator.createdAt).toLocaleDateString('pt-BR',{month:'long',year:'numeric'}):'';
+  const cards=characters.map(ch=>'<article class="creator-full-character">'+(safeImageUrl(ch.image)?'<img class="creator-full-character-image" src="'+escapeHtml(safeImageUrl(ch.image))+'" alt="" loading="lazy" onerror="this.hidden=true">':'<div class="creator-full-character-placeholder">✦</div>')+
+    '<div class="creator-full-character-body"><div class="creator-full-character-title"><strong>'+escapeHtml(ch.name||'Personagem')+'</strong>'+(ch.isOnline?'<span class="creator-online-dot">● Online</span>':'')+'</div>'+
+    (ch.role?'<span class="creator-full-role">'+escapeHtml(ch.role)+'</span>':'')+(ch.description||ch.storyIntro?'<p>'+escapeHtml(String(ch.description||ch.storyIntro).slice(0,260))+(String(ch.description||ch.storyIntro).length>260?'…':'')+'</p>':'')+
+    '<div class="creator-full-character-meta">'+[ch.ageYears!=null?'Idade: '+ch.ageYears+' anos':'',ch.heightCm?'Altura: '+ch.heightCm+' cm':'',ch.weightKg?'Peso: '+ch.weightKg+' kg':'',ch.isOriginal?'Original':''].filter(Boolean).map(v=>'<span>'+escapeHtml(v)+'</span>').join('')+'</div>'+
+    '<button type="button" class="creator-full-open-character" data-open-character="'+escapeHtml(String(ch.id))+'">Ver personagem e conversar <span>›</span></button></div></article>').join('');
   const overlay=document.createElement('div');overlay.className='modal-overlay';overlay.id='creator-profile-modal';
-  const modal=document.createElement('div');modal.className='modal creator-profile-modal';modal.style.maxWidth='460px';
-  modal.innerHTML='<div class="modal-header"><h3>Perfil do criador</h3><button type="button" class="modal-close" aria-label="Fechar">×</button></div>'+
-    '<div class="creator-profile-head">'+(avatar?'<img class="creator-profile-avatar" src="'+escapeHtml(avatar)+'" alt="" onerror="this.hidden=true">':'<div class="creator-profile-avatar creator-profile-avatar-fallback">✦</div>')+
-    '<div class="creator-profile-identity"><strong>'+escapeHtml(creator.username||'Criador')+'</strong><span>Nível de criador '+level+'</span></div></div>'+
-    (creator.bio?'<p class="creator-profile-bio">'+escapeHtml(creator.bio)+'</p>':'')+
-    '<div class="creator-profile-stats"><div><strong>'+chars.length+'</strong><span>Personagens</span></div><div><strong>'+Number(creator.creatorXp||creator.creator_xp||0).toLocaleString('pt-BR')+'</strong><span>XP de criador</span></div></div>'+
-    '<div class="creator-profile-character-list">'+(chars.length?chars.map(c=>'<button type="button" class="creator-profile-character" data-open-character="'+escapeHtml(String(c.id))+'">'+escapeHtml(c.name||'Personagem')+' <span>›</span></button>').join(''):'<p class="admin-row-sub">Este criador ainda não publicou personagens visíveis.</p>')+'</div>'+
-    (!isSelf?'<div class="modal-actions"><button type="button" class="btn '+(following?'btn-secondary':'btn-primary')+'" id="creator-profile-follow">'+(following?'Deixar de seguir':'Seguir criador')+'</button></div>':'');
-  overlay.append(modal);document.body.append(overlay);
-  const close=()=>overlay.remove();modal.querySelector('.modal-close').onclick=close;
-  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  const modal=document.createElement('div');modal.className='modal creator-profile-modal creator-full-profile-modal';modal.style.maxWidth='620px';
+  modal.innerHTML='<div class="creator-full-banner" style="'+(banner?'background-image:linear-gradient(180deg,rgba(8,8,18,.04),rgba(8,8,18,.65)),url(&quot;'+escapeHtml(banner)+'&quot;)':'')+'"><button type="button" class="creator-full-close" aria-label="Fechar">×</button><div class="creator-full-identity">'+
+    (avatar?'<img class="creator-full-avatar" src="'+escapeHtml(avatar)+'" alt="" onerror="this.hidden=true">':'<div class="creator-full-avatar creator-full-avatar-placeholder">✦</div>')+
+    '<div><h2>'+escapeHtml(creator.username||'Criador')+'</h2><span class="creator-full-presence"><i class="'+(online?'online':'offline')+'"></i>'+(online?'Online':'Offline')+'</span></div></div></div><div class="creator-full-content">'+
+    (visible?'<div class="creator-full-stats"><div><strong>'+level+'</strong><span>Nível</span></div><div><strong>'+xp.toLocaleString('pt-BR')+'</strong><span>XP</span></div><div><strong>'+Number(creator.totalMessages||0).toLocaleString('pt-BR')+'</strong><span>Mensagens</span></div><div><strong>'+characters.length+'</strong><span>Personagens</span></div></div>':'<p class="creator-private-note">Este criador escolheu manter os dados do perfil anônimos.</p>')+
+    (joined&&visible?'<p class="creator-full-joined">Membro desde '+escapeHtml(joined)+'</p>':'')+
+    '<div class="creator-full-section-title"><h3>Personagens publicados</h3><span>'+characters.length+'</span></div><div class="creator-full-character-list">'+(cards||'<p class="admin-row-sub">Nenhum personagem público disponível.</p>')+'</div>'+
+    (!isSelf?'<div class="creator-full-actions"><button type="button" class="btn '+(following?'btn-secondary':'btn-primary')+'" id="creator-profile-follow">'+(following?'Deixar de seguir':'Seguir criador')+'</button></div>':'')+'</div>';
+  overlay.append(modal);document.body.append(overlay);const close=()=>overlay.remove();
+  modal.querySelector('.creator-full-close').onclick=close;overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
   modal.querySelectorAll('[data-open-character]').forEach(button=>button.addEventListener('click',()=>{const id=button.dataset.openCharacter;close();openChat(id);}));
-  const followButton=modal.querySelector('#creator-profile-follow');
-  if(followButton)followButton.onclick=async()=>{followButton.disabled=true;try{await toggleCreatorFollow(String(userId),!following);close();}finally{followButton.disabled=false;}};
+  const followButton=modal.querySelector('#creator-profile-follow');if(followButton)followButton.onclick=async()=>{followButton.disabled=true;try{await toggleCreatorFollow(String(userId),!following);close();}finally{followButton.disabled=false;}};
 }
-
 async function toggleCreatorFollow(userId,follow) {
   try {
     await emmaApi("follow_creator",{userId,follow});
@@ -2602,6 +2604,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.8.6',title:'Perfil completo dos criadores',items:['O perfil público agora tem banner de capa e foto de avatar, além de status online/offline.','Exibe nível, XP, total de mensagens, data de entrada e personagens publicados.','Cada personagem mostra imagem, descrição, dados básicos e atalho para abrir a conversa.','A API entrega apenas dados públicos dos personagens e respeita o modo anônimo do criador.']},
     {version:'0.8.5',title:'Perfis de criadores e correções de imagens no chat',items:['O nome de cada criador na aba Criadores abre um perfil público com nível, XP e personagens publicados.','Os personagens do perfil podem ser abertos diretamente e é possível seguir ou deixar de seguir o criador.','O papel de parede do chat permanece aplicado à área de mensagens durante toda a rolagem.','A imagem de fundo respeita a preferência de ocultar imagens e o modo de fotosensibilidade.']},
     {version:'0.8.4',title:'Correção de exibição do banner de perfil',items:['O banner agora é renderizado como uma imagem real sobre o fundo, em vez de depender apenas de background-image do CSS.','A imagem tem tratamento de falha de carregamento e atualização imediata após a migração de banners antigos.','A URL do banner continua sendo validada e carregada a partir do perfil do usuário.']},
     {version:'0.8.3',title:'Correções de preferências, chat e navegação',items:['O modo anônimo e a preferência de ocultar imagens agora podem ser editados sem serem apagados ao salvar outras preferências.','Ações e pensamentos digitados dentro de falas voltam a receber a formatação correta.','Anúncios flutuantes são removidos ao sair do chat, evitando que permaneçam em outras telas.','O perfil mostra corretamente o tipo de conta; a navegação e o seletor de tipo de mensagem verificam se os elementos existem.','Removido o fluxo de chat de jogador que criava conversas apenas locais e não persistidas no servidor.']},
