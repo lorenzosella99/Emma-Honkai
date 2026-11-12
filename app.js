@@ -1333,7 +1333,7 @@ function _renderCharsContent(pref) {
     gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
     emmaApi("creator_directory",{}).then(({creators=[]})=>{
       const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="players"?true:category==="vip"&&isPremiumActive()?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
-      renderPlayerGrid(gpPlayers,filtered);
+      renderPlayerGrid(gpPlayers,filtered,pref);
     }).catch(()=>{gpPlayers.innerHTML='<div class="admin-row-sub">Não foi possível carregar os criadores.</div>';});
   }
   if (playersSec) playersSec.style.display = pref === 'bots' ? 'none' : '';
@@ -1421,7 +1421,7 @@ function showCharacterDetailsModal(characterId) {
   modal.querySelector('.character-details-chat').onclick=()=>{close();openChat(c.id);};
 }
 
-function renderPlayerGrid(container, players) {
+function renderPlayerGrid(container, players, pref='all') {
   if (!container) return;
   const allChars=DB.get('characters',[]).filter(c=>!c.isBanned);
   const groups=new Map();
@@ -1435,7 +1435,7 @@ function renderPlayerGrid(container, players) {
   });
   const visible=[...groups.values()].map(g=>{
     g.characters=g.characters.filter(c=>(state.characterFilter==='vip'?!!c.isVip:state.characterFilter==='normal'?!c.isVip:true))
-      .filter(c=>state.characterGenderFilter==='female'?c.gender==='female':state.characterGenderFilter==='male'?c.gender==='male':true)
+      .filter(c=>pref==='female'?c.gender==='female':pref==='male'?c.gender==='male':true)
       .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
     return g;
   }).filter(g=>g.characters.length);
