@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.9.0';
+const EMMA_APP_VERSION = '0.9.1';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1459,6 +1459,17 @@ function setHideCharacterImages(enabled) {
   try { const key = 'emma_hide_character_images_' + (state.currentUser?.id || 'guest'); if (enabled) localStorage.setItem(key, '1'); else localStorage.removeItem(key); }
   catch(e) { console.warn('Falha ao salvar preferência de acessibilidade:', e); }
 }
+function getDisablePhotosensitivity() {
+  try { return localStorage.getItem('emma_disable_photosensitivity_' + (state.currentUser?.id || 'guest')) === '1'; }
+  catch { return false; }
+}
+function setDisablePhotosensitivity(enabled) {
+  try {
+    const key = 'emma_disable_photosensitivity_' + (state.currentUser?.id || 'guest');
+    if (enabled) localStorage.setItem(key, '1'); else localStorage.removeItem(key);
+    revealedSensitiveCharacters.clear();
+  } catch(e) { console.warn('Falha ao salvar preferência de fotossensibilidade:', e); }
+}
 const revealedSensitiveCharacters = new Set();
 function characterImageSource(src, charId = '', isSensitive = false) {
   if (getHideCharacterImages() || (isSensitive && !revealedSensitiveCharacters.has(String(charId)))) return FALLBACK_SVG;
@@ -1467,7 +1478,7 @@ function characterImageSource(src, charId = '', isSensitive = false) {
 function revealSensitiveCharacterImage(charId) {
   const id = String(charId);
   const char = DB.get('characters', []).find(c => String(c.id) === id);
-  if (!char || !char.isPhotosensitive || getHideCharacterImages()) return;
+  if (!char || !char.isPhotosensitive || getHideCharacterImages() || getDisablePhotosensitivity()) return;
   if (String(state.currentChat?.charId) !== id) return;
   revealedSensitiveCharacters.add(id);
   const avatar = el('chat-char-avatar-img');
@@ -1499,7 +1510,7 @@ function renderCharGrid(container, chars) {
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
-          <img data-sensitive-character="${c.id}" src="${getHideCharacterImages() ? FALLBACK_SVG : safeImageUrl(imgSrc)}" class="${c.isPhotosensitive ? 'photosensitive-preview' : ''}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
+          <img data-sensitive-character="${c.id}" src="${getHideCharacterImages() ? FALLBACK_SVG : safeImageUrl(imgSrc)}" class="${c.isPhotosensitive && !getDisablePhotosensitivity() ? 'photosensitive-preview' : ''}" alt="${escapeHtml(c.name)}" loading="lazy" onerror="this.src='${FALLBACK_SVG}'">
           ${statusDot}${banOverlay}
         </div>
         <div class="char-info">
@@ -1762,7 +1773,7 @@ function renderChatScreen(char, chat) {
   img.setAttribute('data-sensitive-character', char.id);
   const headerInfo = img.closest('.chat-header')?.querySelector('.chat-header-info');
   headerInfo?.querySelectorAll('[data-reveal-character]').forEach(button => button.remove());
-  if (char.isPhotosensitive && char.image && !revealedSensitiveCharacters.has(String(char.id)) && !getHideCharacterImages() && headerInfo) {
+  if (char.isPhotosensitive && char.image && !revealedSensitiveCharacters.has(String(char.id)) && !getHideCharacterImages() && !getDisablePhotosensitivity() && headerInfo) {
     const revealButton = document.createElement('button');
     revealButton.className = 'btn btn-secondary btn-sm';
     revealButton.textContent = 'Mostrar imagem';
@@ -1787,7 +1798,7 @@ function renderChatScreen(char, chat) {
   if (resetChatButton) resetChatButton.classList.toggle('hidden', controllerView);
   if (privateBotButton) privateBotButton.classList.toggle('hidden', controllerView || !state.currentChat?.chatId || char.controlMode === 'users');
   const playerProfile = controllerView ? state.currentChat?.playerProfile : null;
-  const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !!char.image;
+  const showSensitiveBackdrop = !!char.isPhotosensitive && !controllerView && !!char.image && !getHideCharacterImages() && !getDisablePhotosensitivity();
   const backgroundImage = controllerView
     ? (playerProfile?.avatar || (playerProfile?.username ? `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(playerProfile.username)}` : ''))
     : (char.image && (!char.isPhotosensitive || !getHideCharacterImages()) ? char.image : '');
@@ -2608,6 +2619,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.9.1',title:'Proteção de fotossensibilidade no chat',items:['Corrigida a camada visual do fundo do chat para aplicar desfoque e escurecimento quando o personagem estiver marcado como fotossensível.','Adicionada preferência para sempre desativar os avisos e efeitos de fotossensibilidade neste dispositivo.','A opção de ocultar imagens continua independente da nova preferência.']},
     {version:'0.9.0',title:'Respostas mais rápidas no chat',items:['Removido o atraso artificial antes de solicitar a resposta; o indicador de digitação permanece visível durante a geração.','A API deixou de fazer uma segunda chamada de IA para validar coerência em toda resposta principal, reduzindo uma etapa sequencial.']},
     {version:'0.8.9',title:'Interface renovada e desempenho visual',items:['Navegação, abas, cabeçalhos, menus e botões receberam acabamento visual mais consistente, sem alterar o painel Admin.','Reduzidos desfoques, sombras e movimentos para aliviar o trabalho de renderização, especialmente em dispositivos móveis.','Melhorados estados de foco, toque, botões desabilitados e respeito à preferência por movimento reduzido.']},
     {version:'0.8.6',title:'Perfil completo dos criadores',items:['O perfil público agora tem banner de capa e foto de avatar, além de status online/offline.','Exibe nível, XP, total de mensagens, data de entrada e personagens publicados.','Cada personagem mostra imagem, descrição, dados básicos e atalho para abrir a conversa.','A API entrega apenas dados públicos dos personagens e respeita o modo anônimo do criador.']},
@@ -4049,7 +4061,12 @@ function showEditPreferencesModal() {
         <label><input type="checkbox" id="pref-anonymous" ${user.isAnonymous ? 'checked' : ''}> Modo anônimo</label>
       </div>
       <div class="field">
-        <label><input type="checkbox" id="pref-hide-character-images" ${getHideCharacterImages() ? 'checked' : ''}> Ocultar imagens de personagens (fotossensibilidade)</label>
+        <label><input type="checkbox" id="pref-hide-character-images" ${getHideCharacterImages() ? 'checked' : ''}> Ocultar imagens de personagens</label>
+        <small style="display:block;color:var(--text-3);margin:4px 0 0 22px">Substitui as imagens por ícones neutros neste dispositivo.</small>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="pref-disable-photosensitivity" ${getDisablePhotosensitivity() ? 'checked' : ''}> Sempre desativar a proteção de fotossensibilidade</label>
+        <small style="display:block;color:var(--text-3);margin:4px 0 0 22px">Desativa o desfoque e o aviso de imagem sensível nos personagens e fundos do chat neste dispositivo.</small>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary flex-1" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
@@ -4070,6 +4087,8 @@ function savePreferences(btn) {
     user.chatPreference = getChipVal('pref-chatpref', 'both');
     const hideImagesControl = el('pref-hide-character-images');
     if (hideImagesControl) setHideCharacterImages(hideImagesControl.checked);
+    const disablePhotosensitivityControl = el('pref-disable-photosensitivity');
+    if (disablePhotosensitivityControl) setDisablePhotosensitivity(disablePhotosensitivityControl.checked);
     const anonymousControl = el('pref-anonymous');
     if (anonymousControl) user.isAnonymous = anonymousControl.checked;
     DB.set('users', users);
