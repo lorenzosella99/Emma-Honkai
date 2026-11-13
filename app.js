@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.7';
+const EMMA_APP_VERSION = '0.8.8';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1494,7 +1494,8 @@ function renderCharGrid(container, chars) {
     const banOverlay = c.isBanned ? `
       <div class="char-ban-badge"><span>🚫</span><span>BANIDO • ${banDays}d</span></div>
     ` : '';
-    const imgSrc = characterImageSource(c.image,c.id,c.isPhotosensitive);
+    // Cards mostram a imagem normalmente; o controle de fotosensibilidade é aplicado pela preferência individual do usuário.
+    const imgSrc = c.image || FALLBACK_SVG;
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
