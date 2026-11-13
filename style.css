@@ -1731,3 +1731,29 @@ button:focus-visible {
     transition-duration:.01ms !important;
   }
 }
+
+
+/* 0.9.1 — proteção de fotossensibilidade do fundo do chat.
+   A regra legada ocultava o pseudo-elemento e impedia o desfoque. */
+#screen-chat.photosensitive-chat .chat-messages {
+  background-image: none !important;
+  background-color: #0b0c13;
+}
+#screen-chat.photosensitive-chat .chat-messages::before {
+  display: block !important;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(10,11,16,.80), rgba(10,11,16,.86)), var(--chat-character-bg, none);
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(20px) saturate(.35) contrast(.9);
+  transform: scale(1.12);
+}
+#screen-chat.photosensitive-chat .chat-messages > * {
+  position: relative;
+  z-index: 1;
+}
