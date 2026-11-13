@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.8';
+const EMMA_APP_VERSION = '0.8.9';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2610,6 +2610,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.8.9',title:'Interface renovada e desempenho visual',items:['Navegação, abas, cabeçalhos, menus e botões receberam acabamento visual mais consistente, sem alterar o painel Admin.','Reduzidos desfoques, sombras e movimentos para aliviar o trabalho de renderização, especialmente em dispositivos móveis.','Melhorados estados de foco, toque, botões desabilitados e respeito à preferência por movimento reduzido.']},
     {version:'0.8.6',title:'Perfil completo dos criadores',items:['O perfil público agora tem banner de capa e foto de avatar, além de status online/offline.','Exibe nível, XP, total de mensagens, data de entrada e personagens publicados.','Cada personagem mostra imagem, descrição, dados básicos e atalho para abrir a conversa.','A API entrega apenas dados públicos dos personagens e respeita o modo anônimo do criador.']},
     {version:'0.8.5',title:'Perfis de criadores e correções de imagens no chat',items:['O nome de cada criador na aba Criadores abre um perfil público com nível, XP e personagens publicados.','Os personagens do perfil podem ser abertos diretamente e é possível seguir ou deixar de seguir o criador.','O papel de parede do chat permanece aplicado à área de mensagens durante toda a rolagem.','A imagem de fundo respeita a preferência de ocultar imagens e o modo de fotosensibilidade.']},
     {version:'0.8.4',title:'Correção de exibição do banner de perfil',items:['O banner agora é renderizado como uma imagem real sobre o fundo, em vez de depender apenas de background-image do CSS.','A imagem tem tratamento de falha de carregamento e atualização imediata após a migração de banners antigos.','A URL do banner continua sendo validada e carregada a partir do perfil do usuário.']},
