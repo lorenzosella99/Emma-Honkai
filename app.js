@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.6';
+const EMMA_APP_VERSION = '0.8.7';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -1373,7 +1373,7 @@ function renderCharsTab(container) {
         </div>
       </div>
       <div id="user-created-characters-section" style="display:none">
-        <div class="section-title" style="margin-top:14px">✍️ Personagens criados pela comunidade</div>
+        <div class="section-title" style="margin-top:14px">✍️ Criados por usuários</div>
         <div style="padding:0 16px 10px;color:var(--text-3);font-size:.8rem">Personagens publicados por outros usuários.</div>
         <div class="chars-grid" id="chars-grid-user-created"></div>
       </div>
@@ -1426,12 +1426,7 @@ function _renderCharsContent(pref) {
   const playersSec = el('players-section');
   const createdSec=el('user-created-characters-section');
   const createdGrid=el('chars-grid-user-created');
-  const userCreatedChars=chars.filter(c=>c.ownerUserId && c.ownerUserId!==state.currentUser.id && !c.isBanned)
-    .filter(c=>category==="vip"?!!c.isVip:category==="normal"?!c.isVip:true)
-    .filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":true)
-    .sort((x,y)=>String(x.name||"").localeCompare(String(y.name||""),"pt-BR"));
-  if(createdGrid)renderCharGrid(createdGrid,userCreatedChars);
-  if(createdSec)createdSec.style.display=creatorsView?"block":"none";
+  if(createdSec)createdSec.style.display=creatorsView?'none':'block';
   const playersOnly=category==="players";
   const officialTitle=el('bots-official-title'), secondaryTitle=el('bots-secondary-title');
   if (gbOfficial) { gbOfficial.style.display=playersOnly||creatorsView?'none':''; renderCharGrid(gbOfficial, officialBots); }
@@ -1442,8 +1437,14 @@ function _renderCharsContent(pref) {
   if (gpPlayers) {
     gpPlayers.innerHTML='<div class="admin-row-sub">Carregando criadores…</div>';
     emmaApi("creator_directory",{}).then(({creators=[]})=>{
-      const filtered=creators.filter(c=>!c.character?.isBanned).filter(c=>category==="players"?true:category==="vip"&&isPremiumActive()?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
+      const published=creators.filter(c=>c.character&&!c.character.isBanned);
+      const filtered=published.filter(c=>category==="players"?true:category==="vip"&&isPremiumActive()?c.isVip:!c.isVip).filter(c=>pref==="female"?c.gender==="female":pref==="male"?c.gender==="male":pref==="bots"?false:true);
       renderPlayerGrid(gpPlayers,filtered,pref);
+      const communityCharacters=published.filter(c=>category==="players"?true:category==="vip"&&isPremiumActive()?c.isVip:!c.isVip)
+        .filter(c=>pref==="female"?c.character.gender==="female":pref==="male"?c.character.gender==="male":true)
+        .map(c=>({...c.character,ownerUserId:c.userId,authorName:c.username||'Criador',isVip:!!c.isVip}))
+        .sort((x,y)=>String(x.name||'').localeCompare(String(y.name||''),'pt-BR'));
+      if(createdGrid)renderCharGrid(createdGrid,communityCharacters);
     }).catch(()=>{gpPlayers.innerHTML='<div class="admin-row-sub">Não foi possível carregar os criadores.</div>';});
   }
   if (playersSec) playersSec.style.display = pref === 'bots' ? 'none' : '';
@@ -1493,7 +1494,7 @@ function renderCharGrid(container, chars) {
     const banOverlay = c.isBanned ? `
       <div class="char-ban-badge"><span>🚫</span><span>BANIDO • ${banDays}d</span></div>
     ` : '';
-    const imgSrc = c.image || FALLBACK_SVG;
+    const imgSrc = characterImageSource(c.image,c.id,c.isPhotosensitive);
     return `
       <div class="char-card ${c.isBanned ? 'banned' : ''}" onclick="openChat('${c.id}')">
         <div class="char-img-wrap">
@@ -1835,6 +1836,7 @@ function chatSkeletonMarkup() {
 
 function renderMessages(messages, options = {}) {
   const container = el('chat-messages');
+  if (!container) return;
   const previousScrollTop = container.scrollTop;
   const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 90;
   if (!messages.length) {
@@ -1996,6 +1998,7 @@ async function sendMessage() {
   const input = el('chat-input');
   const text = input.value.trim();
   if (!text || state.isTyping) return;
+  if (!state.currentChat?.chatId || !state.currentChat?.char) return toast('Abra uma conversa válida antes de enviar mensagens.', 'error');
   if (state.currentChat && isPremiumChatPausedLocal(state.currentChat)) return toast('Este chat extra está pausado porque seu Emma Premium expirou. Reative o VIP para continuar. Seu histórico está preservado.', 'error', 5000);
 
   // O tipo é identificado pelos delimitadores digitados, sem botões.
@@ -2005,6 +2008,10 @@ async function sendMessage() {
   if (!messageText) return toast('Digite o conteúdo da mensagem dentro dos delimitadores.', 'error');
   const replyTarget = activeReplyTarget;
   const outgoingText = replyTarget ? '↪ Respondendo a ' + replyTarget.author + ': "' + replyTarget.text + '"\n\n' + messageText : messageText;
+  const currentChar = state.currentChat.char;
+  if (currentChar.ownerUserId !== state.currentUser.id && state.currentUser.chatPreference === 'players' && !currentChar.ownerUserId) {
+    return toast('Sua preferência está definida para conversar somente com personagens controlados por players.', 'error');
+  }
 
   // Se quem está digitando é o controlador do personagem, a mensagem sai como personagem.
   if (state.currentChat?.char?.ownerUserId === state.currentUser.id) {
@@ -2037,7 +2044,7 @@ async function sendMessage() {
 
   // Add user message
   const userMsg = {
-    id: 'm_' + Date.now(),
+    id: 'm_' + crypto.randomUUID(),
     senderId: state.currentUser.id,
     chatId: state.currentChat.chatId,
     type,
@@ -2046,10 +2053,8 @@ async function sendMessage() {
     timestamp: Date.now(),
     cost
   };
-  const currentChar = state.currentChat.char;
-  if (state.currentUser.chatPreference === 'players' && !currentChar.ownerUserId) { toast('Sua preferência está definida para conversar somente com personagens controlados por players.', 'error'); return; }
   const owner = currentChar.ownerUserId ? DB.get('users', []).find(u => u.id === currentChar.ownerUserId) : null;
-  const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 60000);
+  const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 120000);
   const botWillRespond = !owner || (!ownerOnline && !!owner.allowBotTakeover);
   const earlyTyping = botWillRespond ? createTypingIndicator(currentChar, userMsg.chatId) : null;
   if (earlyTyping) state.isTyping = true;
