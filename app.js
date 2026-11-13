@@ -2,7 +2,7 @@
    EMMA HONKAI — App Core
    ========================================== */
 
-const EMMA_APP_VERSION = '0.8.9';
+const EMMA_APP_VERSION = '0.9.0';
 let emmaUpdateWatcherTimer = null;
 let emmaUpdateNoticeShown = false;
 
@@ -2151,11 +2151,7 @@ async function botRespond(typingEl = null, alreadyTyping = false, autonomous = f
     const ownerOnline = !!(owner && Date.now() - Number(owner.lastSeenAt || 0) < 120000);
     if (char.controlMode !== 'bot' && owner && ownerOnline && !owner.allowBotTakeover) return;
 
-    const delay = config.botDelay.min + Math.random() * (config.botDelay.max - config.botDelay.min);
     if (!activeTypingEl) activeTypingEl = createTypingIndicator(char, activeChat.chatId);
-    await sleep(delay);
-    removeTypingIndicator(activeTypingEl);
-    activeTypingEl = null;
     if (state.currentChat?.chatId !== activeChat.chatId) return;
 
     const chatHistory = DB.get('messages', {})[activeChat.chatId] || [];
@@ -2196,6 +2192,8 @@ async function botRespond(typingEl = null, alreadyTyping = false, autonomous = f
       if (!speech) speech = { type: 'speech', text: 'Estou aqui. Pode continuar, quero ouvir você.' };
       ordered = [speech, ...localResponses.filter(r => r !== speech && ['action','thought'].includes(r?.type))];
     }
+    removeTypingIndicator(activeTypingEl);
+    activeTypingEl = null;
     const container = el('chat-messages');
 
     for (let i = 0; i < ordered.length; i++) {
@@ -2610,6 +2608,7 @@ async function adminVerifyCharacterAge(characterId) {
 
 function showAppUpdateLog() {
   const entries = [
+    {version:'0.9.0',title:'Respostas mais rápidas no chat',items:['Removido o atraso artificial antes de solicitar a resposta; o indicador de digitação permanece visível durante a geração.','A API deixou de fazer uma segunda chamada de IA para validar coerência em toda resposta principal, reduzindo uma etapa sequencial.']},
     {version:'0.8.9',title:'Interface renovada e desempenho visual',items:['Navegação, abas, cabeçalhos, menus e botões receberam acabamento visual mais consistente, sem alterar o painel Admin.','Reduzidos desfoques, sombras e movimentos para aliviar o trabalho de renderização, especialmente em dispositivos móveis.','Melhorados estados de foco, toque, botões desabilitados e respeito à preferência por movimento reduzido.']},
     {version:'0.8.6',title:'Perfil completo dos criadores',items:['O perfil público agora tem banner de capa e foto de avatar, além de status online/offline.','Exibe nível, XP, total de mensagens, data de entrada e personagens publicados.','Cada personagem mostra imagem, descrição, dados básicos e atalho para abrir a conversa.','A API entrega apenas dados públicos dos personagens e respeita o modo anônimo do criador.']},
     {version:'0.8.5',title:'Perfis de criadores e correções de imagens no chat',items:['O nome de cada criador na aba Criadores abre um perfil público com nível, XP e personagens publicados.','Os personagens do perfil podem ser abertos diretamente e é possível seguir ou deixar de seguir o criador.','O papel de parede do chat permanece aplicado à área de mensagens durante toda a rolagem.','A imagem de fundo respeita a preferência de ocultar imagens e o modo de fotosensibilidade.']},
